@@ -1,47 +1,38 @@
 import { type NextRequest, NextResponse } from "next/server"
-import { supabase } from "@/lib/supabase"
+import { createServerClient } from "@/lib/supabase"
 
 export async function GET() {
   try {
-    const { data, error } = await supabase.from("items").select("*").order("name", { ascending: true })
+    const supabase = createServerClient()
+    const { data: items, error } = await supabase.from("items").select("*").order("created_at", { ascending: false })
 
     if (error) {
       console.error("Error fetching items:", error)
-      return NextResponse.json({ error: error.message }, { status: 500 })
+      return NextResponse.json({ error: "Failed to fetch items" }, { status: 500 })
     }
 
-    return NextResponse.json(data)
+    return NextResponse.json(items)
   } catch (error) {
-    console.error("Unexpected error:", error)
-    return NextResponse.json({ error: "Internal server error" }, { status: 500 })
+    console.error("Error:", error)
+    return NextResponse.json({ error: "Failed to fetch items" }, { status: 500 })
   }
 }
 
 export async function POST(request: NextRequest) {
   try {
+    const supabase = createServerClient()
     const body = await request.json()
 
-    const { data, error } = await supabase
-      .from("items")
-      .insert([
-        {
-          name: body.name,
-          category: body.category,
-          price: body.price,
-          description: body.description,
-          status: body.status,
-        },
-      ])
-      .select()
+    const { data: item, error } = await supabase.from("items").insert([body]).select().single()
 
     if (error) {
       console.error("Error creating item:", error)
-      return NextResponse.json({ error: error.message }, { status: 500 })
+      return NextResponse.json({ error: "Failed to create item" }, { status: 500 })
     }
 
-    return NextResponse.json(data[0])
+    return NextResponse.json(item, { status: 201 })
   } catch (error) {
-    console.error("Unexpected error:", error)
-    return NextResponse.json({ error: "Internal server error" }, { status: 500 })
+    console.error("Error:", error)
+    return NextResponse.json({ error: "Failed to create item" }, { status: 500 })
   }
 }

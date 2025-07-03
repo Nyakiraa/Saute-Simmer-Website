@@ -1,49 +1,41 @@
 import { type NextRequest, NextResponse } from "next/server"
-import { supabase } from "@/lib/supabase"
+import { createServerClient } from "@/lib/supabase"
 
 export async function GET() {
   try {
-    const { data, error } = await supabase.from("payments").select("*").order("payment_date", { ascending: false })
+    const supabase = createServerClient()
+    const { data: payments, error } = await supabase
+      .from("payments")
+      .select("*")
+      .order("created_at", { ascending: false })
 
     if (error) {
       console.error("Error fetching payments:", error)
-      return NextResponse.json({ error: error.message }, { status: 500 })
+      return NextResponse.json({ error: "Failed to fetch payments" }, { status: 500 })
     }
 
-    return NextResponse.json(data)
+    return NextResponse.json(payments)
   } catch (error) {
-    console.error("Unexpected error:", error)
-    return NextResponse.json({ error: "Internal server error" }, { status: 500 })
+    console.error("Error:", error)
+    return NextResponse.json({ error: "Failed to fetch payments" }, { status: 500 })
   }
 }
 
 export async function POST(request: NextRequest) {
   try {
+    const supabase = createServerClient()
     const body = await request.json()
 
-    const { data, error } = await supabase
-      .from("payments")
-      .insert([
-        {
-          customer_id: body.customer_id,
-          customer_name: body.customer_name,
-          amount: body.amount,
-          payment_method: body.payment_method,
-          status: body.status,
-          payment_date: body.payment_date,
-          notes: body.notes,
-        },
-      ])
-      .select()
+    const { data: payment, error } = await supabase.from("payments").insert([body]).select().single()
 
     if (error) {
       console.error("Error creating payment:", error)
-      return NextResponse.json({ error: error.message }, { status: 500 })
+      return NextResponse.json({ error: "Failed to create payment" }, { status: 500 })
     }
 
-    return NextResponse.json(data[0])
+    return NextResponse.json(payment, { status: 201 })
   } catch (error) {
-    console.error("Unexpected error:", error)
-    return NextResponse.json({ error: "Internal server error" }, { status: 500 })
+    console.error("Error:", error)
+    return NextResponse.json({ error: "Failed to create payment" }, { status: 500 })
   }
 }

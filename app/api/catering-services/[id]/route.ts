@@ -1,34 +1,75 @@
 import { type NextRequest, NextResponse } from "next/server"
-import { supabase } from "@/lib/supabase"
+import { createServerClient } from "@/lib/supabase"
 
-export async function PUT(request: NextRequest, { params }: { params: { id: string } }) {
+export async function GET(request: NextRequest, context: { params: Promise<{ id: string }> }) {
   try {
-    const body = await request.json()
-    const id = params.id
+    const { id } = await context.params
+    const supabase = createServerClient()
 
-    const { data, error } = await supabase
+    const { data: service, error } = await supabase
       .from("catering_services")
-      .update({
-        customer_id: body.customer_id,
-        customer_name: body.customer_name,
-        event_type: body.event_type,
-        event_date: body.event_date,
-        guest_count: body.guest_count,
-        status: body.status,
-        location: body.location,
-        special_requests: body.special_requests,
-      })
-      .eq("id", id)
-      .select()
+      .select("*")
+      .eq("id", Number.parseInt(id))
+      .single()
 
     if (error) {
-      console.error("Error updating catering service:", error)
-      return NextResponse.json({ error: error.message }, { status: 500 })
+      if (error.code === "PGRST116") {
+        return NextResponse.json({ error: "Service not found" }, { status: 404 })
+      }
+      console.error("Error fetching service:", error)
+      return NextResponse.json({ error: "Failed to fetch service" }, { status: 500 })
     }
 
-    return NextResponse.json(data[0])
+    return NextResponse.json(service)
   } catch (error) {
-    console.error("Unexpected error:", error)
-    return NextResponse.json({ error: "Internal server error" }, { status: 500 })
+    console.error("Error:", error)
+    return NextResponse.json({ error: "Failed to fetch service" }, { status: 500 })
+  }
+}
+
+export async function PUT(request: NextRequest, context: { params: Promise<{ id: string }> }) {
+  try {
+    const { id } = await context.params
+    const body = await request.json()
+    const supabase = createServerClient()
+
+    const { data: service, error } = await supabase
+      .from("catering_services")
+      .update(body)
+      .eq("id", Number.parseInt(id))
+      .select()
+      .single()
+
+    if (error) {
+      if (error.code === "PGRST116") {
+        return NextResponse.json({ error: "Service not found" }, { status: 404 })
+      }
+      console.error("Error updating service:", error)
+      return NextResponse.json({ error: "Failed to update service" }, { status: 500 })
+    }
+
+    return NextResponse.json(service)
+  } catch (error) {
+    console.error("Error:", error)
+    return NextResponse.json({ error: "Failed to update service" }, { status: 500 })
+  }
+}
+
+export async function DELETE(request: NextRequest, context: { params: Promise<{ id: string }> }) {
+  try {
+    const { id } = await context.params
+    const supabase = createServerClient()
+
+    const { error } = await supabase.from("catering_services").delete().eq("id", Number.parseInt(id))
+
+    if (error) {
+      console.error("Error deleting service:", error)
+      return NextResponse.json({ error: "Failed to delete service" }, { status: 500 })
+    }
+
+    return NextResponse.json({ message: "Service deleted successfully" })
+  } catch (error) {
+    console.error("Error:", error)
+    return NextResponse.json({ error: "Failed to delete service" }, { status: 500 })
   }
 }

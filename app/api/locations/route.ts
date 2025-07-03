@@ -1,46 +1,41 @@
 import { type NextRequest, NextResponse } from "next/server"
-import { supabase } from "@/lib/supabase"
+import { createServerClient } from "@/lib/supabase"
 
 export async function GET() {
   try {
-    const { data, error } = await supabase.from("locations").select("*").order("date_of_service", { ascending: false })
+    const supabase = createServerClient()
+    const { data: locations, error } = await supabase
+      .from("locations")
+      .select("*")
+      .order("created_at", { ascending: false })
 
     if (error) {
       console.error("Error fetching locations:", error)
-      return NextResponse.json({ error: error.message }, { status: 500 })
+      return NextResponse.json({ error: "Failed to fetch locations" }, { status: 500 })
     }
 
-    return NextResponse.json(data)
+    return NextResponse.json(locations)
   } catch (error) {
-    console.error("Unexpected error:", error)
-    return NextResponse.json({ error: "Internal server error" }, { status: 500 })
+    console.error("Error:", error)
+    return NextResponse.json({ error: "Failed to fetch locations" }, { status: 500 })
   }
 }
 
 export async function POST(request: NextRequest) {
   try {
+    const supabase = createServerClient()
     const body = await request.json()
 
-    const { data, error } = await supabase
-      .from("locations")
-      .insert([
-        {
-          address: body.address,
-          date_of_service: body.date_of_service,
-          start_time: body.start_time,
-          end_time: body.end_time,
-        },
-      ])
-      .select()
+    const { data: location, error } = await supabase.from("locations").insert([body]).select().single()
 
     if (error) {
       console.error("Error creating location:", error)
-      return NextResponse.json({ error: error.message }, { status: 500 })
+      return NextResponse.json({ error: "Failed to create location" }, { status: 500 })
     }
 
-    return NextResponse.json(data[0])
+    return NextResponse.json(location, { status: 201 })
   } catch (error) {
-    console.error("Unexpected error:", error)
-    return NextResponse.json({ error: "Internal server error" }, { status: 500 })
+    console.error("Error:", error)
+    return NextResponse.json({ error: "Failed to create location" }, { status: 500 })
   }
 }
