@@ -82,6 +82,8 @@ export default function HomePage() {
                     fontSize: "3rem",
                     marginBottom: "20px",
                     textShadow: "2px 2px 4px rgba(0, 0, 0, 0.5)",
+                    fontFamily: "'Cinzel Decorative', serif",
+                    fontWeight: "700",
                   }}
                 >
                   {slide.title}
@@ -158,6 +160,8 @@ export default function HomePage() {
                 marginBottom: "15px",
                 position: "relative",
                 display: "inline-block",
+                fontFamily: "'Cinzel Decorative', serif",
+                fontWeight: "700",
               }}
             >
               Our Services
@@ -287,6 +291,8 @@ export default function HomePage() {
                 fontSize: "2.5rem",
                 color: "var(--primary-color)",
                 marginBottom: "15px",
+                fontFamily: "'Cinzel Decorative', serif",
+                fontWeight: "700",
               }}
             >
               Popular Meal Sets
