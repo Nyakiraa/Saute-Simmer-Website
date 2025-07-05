@@ -2,11 +2,13 @@
 
 import type React from "react"
 
-import { useState } from "react"
+import { useState, useEffect } from "react"
 import Image from "next/image"
+import { signInWithGoogle, signInWithFacebook, signInWithEmail, getCurrentUser } from "@/lib/supabase-auth"
 
 export default function LoginPage() {
   const [isCustomer, setIsCustomer] = useState(true)
+  const [isLoading, setIsLoading] = useState(false)
   const [formData, setFormData] = useState({
     email: "",
     password: "",
@@ -20,6 +22,23 @@ export default function LoginPage() {
     "charnepomuceno@gbox.adnu.edu.ph": "root",
   }
 
+  // Check if user is already logged in
+  useEffect(() => {
+    const checkUser = async () => {
+      const user = await getCurrentUser()
+      if (user) {
+        // User is already logged in, redirect appropriately
+        const allowedAdminEmails = Object.keys(allowedAdmins)
+        if (allowedAdminEmails.includes(user.email || "")) {
+          window.location.href = "/admin"
+        } else {
+          window.location.href = "/"
+        }
+      }
+    }
+    checkUser()
+  }, [])
+
   const handleInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     setFormData({
       ...formData,
@@ -27,39 +46,89 @@ export default function LoginPage() {
     })
   }
 
-  const handleCustomerSubmit = (e: React.FormEvent) => {
+  const handleCustomerSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
+    setIsLoading(true)
 
     if (!formData.email || !formData.password) {
       alert("Please fill out all required fields.")
+      setIsLoading(false)
       return
     }
 
-    console.log("Customer form submitted:", formData)
-    // Redirect to homepage after successful login
-    window.location.href = "/"
+    try {
+      const { user } = await signInWithEmail(formData.email, formData.password)
+      if (user) {
+        // Check if this user is an admin
+        const allowedAdminEmails = Object.keys(allowedAdmins)
+        if (allowedAdminEmails.includes(user.email || "")) {
+          window.location.href = "/admin"
+        } else {
+          window.location.href = "/"
+        }
+      }
+    } catch (error: any) {
+      console.error("Login error:", error)
+      alert(error.message || "Login failed. Please check your credentials.")
+    } finally {
+      setIsLoading(false)
+    }
   }
 
-  const handleAdminSubmit = (e: React.FormEvent) => {
+  const handleAdminSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
+    setIsLoading(true)
 
-    if (allowedAdmins[formData.adminEmail as keyof typeof allowedAdmins] !== formData.adminPassword) {
-      alert("Invalid admin credentials. Access denied.")
+    // For admin, we can use either the hardcoded credentials or Supabase auth
+    if (allowedAdmins[formData.adminEmail as keyof typeof allowedAdmins] === formData.adminPassword) {
+      // Use hardcoded admin credentials
+      alert("Admin login successful! Redirecting to admin panel...")
+      window.location.href = "/admin"
+      setIsLoading(false)
       return
     }
 
-    // Redirect to admin panel
-    alert("Admin login successful! Redirecting to admin panel...")
+    // Try Supabase auth for admin
+    try {
+      const { user } = await signInWithEmail(formData.adminEmail, formData.adminPassword)
+      if (user) {
+        const allowedAdminEmails = Object.keys(allowedAdmins)
+        if (allowedAdminEmails.includes(user.email || "")) {
+          window.location.href = "/admin"
+        } else {
+          alert("Access denied. Admin privileges required.")
+        }
+      }
+    } catch (error: any) {
+      console.error("Admin login error:", error)
+      alert("Invalid admin credentials. Access denied.")
+    } finally {
+      setIsLoading(false)
+    }
   }
 
-  const handleGoogleLogin = () => {
-    alert("Google login functionality will be implemented here")
-    // Implement Google OAuth login
+  const handleGoogleLogin = async () => {
+    setIsLoading(true)
+    try {
+      await signInWithGoogle()
+      // The redirect will be handled by the OAuth flow
+    } catch (error: any) {
+      console.error("Google login error:", error)
+      alert(error.message || "Google login failed. Please try again.")
+      setIsLoading(false)
+    }
   }
 
-  const handleFacebookLogin = () => {
-    alert("Facebook login functionality will be implemented here")
-    // Implement Facebook OAuth login
+  const handleFacebookLogin = async () => {
+    setIsLoading(true)
+    try {
+      await signInWithFacebook()
+      // The redirect will be handled by the OAuth flow
+    } catch (error: any) {
+      console.error("Facebook login error:", error)
+      alert(error.message || "Facebook login failed. Please try again.")
+      setIsLoading(false)
+    }
   }
 
   return (
@@ -243,6 +312,7 @@ export default function LoginPage() {
                     onChange={handleInputChange}
                     placeholder="Enter your email"
                     required
+                    disabled={isLoading}
                     style={{
                       width: "100%",
                       padding: "12px 15px",
@@ -251,6 +321,7 @@ export default function LoginPage() {
                       fontSize: "1rem",
                       transition: "border-color 0.3s ease, box-shadow 0.3s ease",
                       fontFamily: "Poppins, sans-serif",
+                      opacity: isLoading ? 0.6 : 1,
                     }}
                   />
                 </div>
@@ -264,6 +335,7 @@ export default function LoginPage() {
                     onChange={handleInputChange}
                     placeholder="Enter your password"
                     required
+                    disabled={isLoading}
                     style={{
                       width: "100%",
                       padding: "12px 15px",
@@ -272,27 +344,31 @@ export default function LoginPage() {
                       fontSize: "1rem",
                       transition: "border-color 0.3s ease, box-shadow 0.3s ease",
                       fontFamily: "Poppins, sans-serif",
+                      opacity: isLoading ? 0.6 : 1,
                     }}
                   />
                 </div>
 
                 <button
                   type="submit"
+                  disabled={isLoading}
                   style={{
                     width: "100%",
                     padding: "12px",
-                    background: "linear-gradient(to right, var(--primary-color), var(--primary-dark))",
+                    background: isLoading
+                      ? "#ccc"
+                      : "linear-gradient(to right, var(--primary-color), var(--primary-dark))",
                     color: "var(--light-text)",
                     border: "none",
                     borderRadius: "8px",
                     fontSize: "1rem",
                     fontWeight: "500",
-                    cursor: "pointer",
+                    cursor: isLoading ? "not-allowed" : "pointer",
                     transition: "transform 0.3s ease, box-shadow 0.3s ease",
                     fontFamily: "Poppins, sans-serif",
                   }}
                 >
-                  Sign In
+                  {isLoading ? "Signing In..." : "Sign In"}
                 </button>
 
                 {/* Divider */}
@@ -311,31 +387,38 @@ export default function LoginPage() {
                 {/* Social Login Buttons */}
                 <div style={{ marginBottom: "20px" }}>
                   <button
+                    type="button"
                     onClick={handleGoogleLogin}
+                    disabled={isLoading}
                     style={{
                       width: "100%",
                       padding: "12px",
-                      backgroundColor: "white",
+                      backgroundColor: isLoading ? "#f5f5f5" : "white",
                       color: "#333",
                       border: "1px solid #dadce0",
                       borderRadius: "8px",
                       fontSize: "1rem",
                       fontWeight: "500",
-                      cursor: "pointer",
+                      cursor: isLoading ? "not-allowed" : "pointer",
                       transition: "box-shadow 0.3s ease, border-color 0.3s ease",
                       fontFamily: "Poppins, sans-serif",
                       marginBottom: "10px",
                       display: "flex",
                       alignItems: "center",
                       justifyContent: "center",
+                      opacity: isLoading ? 0.6 : 1,
                     }}
                     onMouseEnter={(e) => {
-                      e.currentTarget.style.boxShadow = "0 2px 8px rgba(0,0,0,0.1)"
-                      e.currentTarget.style.borderColor = "#bbb"
+                      if (!isLoading) {
+                        e.currentTarget.style.boxShadow = "0 2px 8px rgba(0,0,0,0.1)"
+                        e.currentTarget.style.borderColor = "#bbb"
+                      }
                     }}
                     onMouseLeave={(e) => {
-                      e.currentTarget.style.boxShadow = "none"
-                      e.currentTarget.style.borderColor = "#dadce0"
+                      if (!isLoading) {
+                        e.currentTarget.style.boxShadow = "none"
+                        e.currentTarget.style.borderColor = "#dadce0"
+                      }
                     }}
                   >
                     <svg width="18" height="18" viewBox="0 0 24 24" style={{ marginRight: "12px" }}>
@@ -356,33 +439,40 @@ export default function LoginPage() {
                         d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z"
                       />
                     </svg>
-                    Continue with Google
+                    {isLoading ? "Please wait..." : "Continue with Google"}
                   </button>
                   <button
+                    type="button"
                     onClick={handleFacebookLogin}
+                    disabled={isLoading}
                     style={{
                       width: "100%",
                       padding: "12px",
-                      backgroundColor: "white",
+                      backgroundColor: isLoading ? "#f5f5f5" : "white",
                       color: "#333",
                       border: "1px solid #dadce0",
                       borderRadius: "8px",
                       fontSize: "1rem",
                       fontWeight: "500",
-                      cursor: "pointer",
+                      cursor: isLoading ? "not-allowed" : "pointer",
                       transition: "box-shadow 0.3s ease, border-color 0.3s ease",
                       fontFamily: "Poppins, sans-serif",
                       display: "flex",
                       alignItems: "center",
                       justifyContent: "center",
+                      opacity: isLoading ? 0.6 : 1,
                     }}
                     onMouseEnter={(e) => {
-                      e.currentTarget.style.boxShadow = "0 2px 8px rgba(0,0,0,0.1)"
-                      e.currentTarget.style.borderColor = "#bbb"
+                      if (!isLoading) {
+                        e.currentTarget.style.boxShadow = "0 2px 8px rgba(0,0,0,0.1)"
+                        e.currentTarget.style.borderColor = "#bbb"
+                      }
                     }}
                     onMouseLeave={(e) => {
-                      e.currentTarget.style.boxShadow = "none"
-                      e.currentTarget.style.borderColor = "#dadce0"
+                      if (!isLoading) {
+                        e.currentTarget.style.boxShadow = "none"
+                        e.currentTarget.style.borderColor = "#dadce0"
+                      }
                     }}
                   >
                     <svg width="18" height="18" viewBox="0 0 24 24" style={{ marginRight: "12px" }}>
@@ -391,7 +481,7 @@ export default function LoginPage() {
                         d="M24 12.073c0-6.627-5.373-12-12-12s-12 5.373-12 12c0 5.99 4.388 10.954 10.125 11.854v-8.385H7.078v-3.47h3.047V9.43c0-3.007 1.792-4.669 4.533-4.669 1.312 0 2.686.235 2.686.235v2.953H15.83c-1.491 0-1.956.925-1.956 1.874v2.25h3.328l-.532 3.47h-2.796v8.385C19.612 23.027 24 18.062 24 12.073z"
                       />
                     </svg>
-                    Continue with Facebook
+                    {isLoading ? "Please wait..." : "Continue with Facebook"}
                   </button>
                 </div>
 
@@ -424,6 +514,7 @@ export default function LoginPage() {
                   onChange={handleInputChange}
                   placeholder="Enter admin email"
                   required
+                  disabled={isLoading}
                   style={{
                     width: "100%",
                     padding: "12px 15px",
@@ -432,6 +523,7 @@ export default function LoginPage() {
                     fontSize: "1rem",
                     transition: "border-color 0.3s ease, box-shadow 0.3s ease",
                     fontFamily: "Poppins, sans-serif",
+                    opacity: isLoading ? 0.6 : 1,
                   }}
                 />
               </div>
@@ -445,6 +537,7 @@ export default function LoginPage() {
                   onChange={handleInputChange}
                   placeholder="Enter admin password"
                   required
+                  disabled={isLoading}
                   style={{
                     width: "100%",
                     padding: "12px 15px",
@@ -453,27 +546,31 @@ export default function LoginPage() {
                     fontSize: "1rem",
                     transition: "border-color 0.3s ease, box-shadow 0.3s ease",
                     fontFamily: "Poppins, sans-serif",
+                    opacity: isLoading ? 0.6 : 1,
                   }}
                 />
               </div>
 
               <button
                 type="submit"
+                disabled={isLoading}
                 style={{
                   width: "100%",
                   padding: "12px",
-                  background: "linear-gradient(to right, var(--primary-color), var(--primary-dark))",
+                  background: isLoading
+                    ? "#ccc"
+                    : "linear-gradient(to right, var(--primary-color), var(--primary-dark))",
                   color: "var(--light-text)",
                   border: "none",
                   borderRadius: "8px",
                   fontSize: "1rem",
                   fontWeight: "500",
-                  cursor: "pointer",
+                  cursor: isLoading ? "not-allowed" : "pointer",
                   transition: "transform 0.3s ease, box-shadow 0.3s ease",
                   fontFamily: "Poppins, sans-serif",
                 }}
               >
-                Admin Sign In
+                {isLoading ? "Signing In..." : "Admin Sign In"}
               </button>
             </form>
           )}
