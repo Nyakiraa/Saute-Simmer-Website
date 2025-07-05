@@ -16,23 +16,25 @@ export default function LoginPage() {
     adminPassword: "",
   })
 
-  const allowedAdmins = {
-    "ecbathan@gbox.adnu.edu.ph": "root",
-    "rabad@gbox.adnu.edu.ph": "root",
-    "charnepomuceno@gbox.adnu.edu.ph": "root",
-  }
-
   // Check if user is already logged in
   useEffect(() => {
     const checkUser = async () => {
       const user = await getCurrentUser()
       if (user) {
+        // Get redirect parameter from URL
+        const urlParams = new URLSearchParams(window.location.search)
+        const redirect = urlParams.get("redirect")
+
         // User is already logged in, redirect appropriately
-        const allowedAdminEmails = Object.keys(allowedAdmins)
+        const allowedAdminEmails = [
+          "ecbathan@gbox.adnu.edu.ph",
+          "rabad@gbox.adnu.edu.ph",
+          "charnepomuceno@gbox.adnu.edu.ph",
+        ]
         if (allowedAdminEmails.includes(user.email || "")) {
-          window.location.href = "/admin"
+          window.location.href = redirect || "/admin"
         } else {
-          window.location.href = "/"
+          window.location.href = redirect || "/"
         }
       }
     }
@@ -59,12 +61,20 @@ export default function LoginPage() {
     try {
       const { user } = await signInWithEmail(formData.email, formData.password)
       if (user) {
+        // Get redirect parameter from URL
+        const urlParams = new URLSearchParams(window.location.search)
+        const redirect = urlParams.get("redirect")
+
         // Check if this user is an admin
-        const allowedAdminEmails = Object.keys(allowedAdmins)
+        const allowedAdminEmails = [
+          "ecbathan@gbox.adnu.edu.ph",
+          "rabad@gbox.adnu.edu.ph",
+          "charnepomuceno@gbox.adnu.edu.ph",
+        ]
         if (allowedAdminEmails.includes(user.email || "")) {
-          window.location.href = "/admin"
+          window.location.href = redirect || "/admin"
         } else {
-          window.location.href = "/"
+          window.location.href = redirect || "/"
         }
       }
     } catch (error: any) {
@@ -79,29 +89,35 @@ export default function LoginPage() {
     e.preventDefault()
     setIsLoading(true)
 
-    // For admin, we can use either the hardcoded credentials or Supabase auth
-    if (allowedAdmins[formData.adminEmail as keyof typeof allowedAdmins] === formData.adminPassword) {
-      // Use hardcoded admin credentials
-      alert("Admin login successful! Redirecting to admin panel...")
-      window.location.href = "/admin"
+    if (!formData.adminEmail || !formData.adminPassword) {
+      alert("Please fill out all required fields.")
       setIsLoading(false)
       return
     }
 
-    // Try Supabase auth for admin
     try {
       const { user } = await signInWithEmail(formData.adminEmail, formData.adminPassword)
       if (user) {
-        const allowedAdminEmails = Object.keys(allowedAdmins)
+        // Get redirect parameter from URL
+        const urlParams = new URLSearchParams(window.location.search)
+        const redirect = urlParams.get("redirect")
+
+        // Check if this user is an admin
+        const allowedAdminEmails = [
+          "ecbathan@gbox.adnu.edu.ph",
+          "rabad@gbox.adnu.edu.ph",
+          "charnepomuceno@gbox.adnu.edu.ph",
+        ]
+
         if (allowedAdminEmails.includes(user.email || "")) {
-          window.location.href = "/admin"
+          window.location.href = redirect || "/admin"
         } else {
           alert("Access denied. Admin privileges required.")
         }
       }
     } catch (error: any) {
       console.error("Admin login error:", error)
-      alert("Invalid admin credentials. Access denied.")
+      alert("Invalid admin credentials. Please check your email and password.")
     } finally {
       setIsLoading(false)
     }

@@ -17,6 +17,10 @@ export default function AuthCallback() {
         }
 
         if (data.session) {
+          // Get redirect parameter from URL if it exists
+          const urlParams = new URLSearchParams(window.location.search)
+          const redirect = urlParams.get("redirect")
+
           // Check if user is admin based on email
           const userEmail = data.session.user.email
           const allowedAdmins = [
@@ -26,11 +30,12 @@ export default function AuthCallback() {
           ]
 
           if (allowedAdmins.includes(userEmail || "")) {
-            // Redirect to admin dashboard
-            window.location.href = "/admin"
+            // Redirect to admin dashboard or specified redirect
+            window.location.href = redirect || "/admin"
           } else {
-            // Redirect to customer homepage
-            window.location.href = "/"
+            // Redirect to customer homepage or specified redirect (but not admin)
+            const safeRedirect = redirect && !redirect.includes("/admin") ? redirect : "/"
+            window.location.href = safeRedirect
           }
         } else {
           // No session, redirect to login
