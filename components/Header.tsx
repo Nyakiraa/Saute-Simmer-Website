@@ -1,87 +1,61 @@
 "use client"
 
-import type React from "react"
-import { useState, useEffect } from "react"
-import { getCurrentUser, signOut } from "@/lib/supabase-auth"
-import type { User } from "@supabase/supabase-js"
+import { useState } from "react"
+import Link from "next/link"
+import Image from "next/image"
+import { usePathname } from "next/navigation"
 
-const Header: React.FC = () => {
-  const [user, setUser] = useState<User | null>(null)
+export default function Header() {
+  const [isMenuOpen, setIsMenuOpen] = useState(false)
+  const pathname = usePathname()
 
-  useEffect(() => {
-    const checkUser = async () => {
-      const currentUser = await getCurrentUser()
-      setUser(currentUser)
-    }
-    checkUser()
-  }, [])
-
-  const handleLogout = async () => {
-    try {
-      await signOut()
-      setUser(null)
-      // Redirect to login page with success message
-      window.location.href = "/login?message=logged-out"
-    } catch (error) {
-      console.error("Logout error:", error)
-      alert("Failed to logout")
-    }
-  }
+  const isActive = (path: string) => pathname === path
 
   return (
-    <header className="navbar bg-base-100 shadow-lg">
-      <div className="flex-1">
-        <a href="/" className="btn btn-ghost text-xl text-red-600 font-bold">
-          SAUTÉ & SIMMER
-        </a>
-      </div>
-      <div className="flex-none">
-        <div className="navbar-center hidden lg:flex">
-          <ul className="menu menu-horizontal px-1">
+    <header>
+      <div className="header-container">
+        <div className="nav-container">
+          <Link href="/">
+            <Image src="/images/redlogo.png" alt="Saute and Simmer Logo" width={120} height={50} className="logo" />
+          </Link>
+
+          <ul className={`nav-links ${isMenuOpen ? "active" : ""}`}>
             <li>
-              <a href="/">Home</a>
+              <Link href="/" className={isActive("/") ? "active" : ""} onClick={() => setIsMenuOpen(false)}>
+                Home
+              </Link>
             </li>
             <li>
-              <a href="/meals">Meal Sets</a>
+              <Link href="/meals" className={isActive("/meals") ? "active" : ""} onClick={() => setIsMenuOpen(false)}>
+                Meal Sets
+              </Link>
             </li>
             <li>
-              <a href="/custom-meals">Custom Meals</a>
+              <Link
+                href="/custom-meals"
+                className={isActive("/custom-meals") ? "active" : ""}
+                onClick={() => setIsMenuOpen(false)}
+              >
+                Custom Meals
+              </Link>
             </li>
             <li>
-              <a href="/orders">My Orders</a>
+              <Link href="/orders" className={isActive("/orders") ? "active" : ""} onClick={() => setIsMenuOpen(false)}>
+                My Orders
+              </Link>
             </li>
           </ul>
         </div>
-        {user ? (
-          <div className="dropdown dropdown-end">
-            <div tabIndex={0} role="button" className="btn btn-ghost btn-circle avatar">
-              <div className="w-10 rounded-full bg-red-600 flex items-center justify-center">
-                <span className="text-white font-bold">{user.email?.charAt(0).toUpperCase()}</span>
-              </div>
-            </div>
-            <ul
-              tabIndex={0}
-              className="menu menu-sm dropdown-content mt-3 z-[1] p-2 shadow bg-base-100 rounded-box w-52"
-            >
-              <li>
-                <a href="/profile">Profile</a>
-              </li>
-              <li>
-                <a href="/orders">My Orders</a>
-              </li>
-              <li>
-                <button onClick={handleLogout}>Logout</button>
-              </li>
-            </ul>
+
+        <div className="profile-dropdown">
+          <div className="profile-icon">
+            <i className="fas fa-user"></i>
           </div>
-        ) : (
-          <a href="/login" className="btn btn-primary">
-            Login
-          </a>
-        )}
+          <div className="dropdown-content">
+            <Link href="/login">Log Out</Link>
+          </div>
+        </div>
       </div>
     </header>
   )
 }
-
-export default Header
