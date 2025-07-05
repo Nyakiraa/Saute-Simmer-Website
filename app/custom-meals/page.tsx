@@ -126,7 +126,8 @@ export default function CustomMealsPage() {
         }}
       >
         <div style={{ maxWidth: "800px", margin: "0 auto" }}>
-          <h1 style={{ fontSize: "3rem", marginBottom: "20px" }}>Create Custom Meal</h1>
+          <h1 style={{ fontSize: "3rem", marginBottom: "20px", fontFamily: "'Cinzel Decorative', serif",
+                    fontWeight: "700" }}>Create Custom Meal</h1>
           <p style={{ fontSize: "1.2rem", marginBottom: "0", opacity: "0.9" }}>
             Mix and match from our extensive menu to create the perfect meal for your event.
           </p>
