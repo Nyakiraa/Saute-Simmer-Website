@@ -81,7 +81,7 @@ export default function Header() {
             <li>
               <Link
                 href="/custom-meals"
-                className={isActive("/custom-meals") ? "active" : ""} 
+                className={isActive("/custom-meals") ? "active" : ""}
                 onClick={() => setIsMenuOpen(false)}
               >
                 Custom Meals
@@ -102,23 +102,30 @@ export default function Header() {
             style={{ cursor: "pointer", display: "flex", alignItems: "center" }}
           >
             {user ? (
-              <>
-               
-              </>
+              <div
+                style={{
+                  width: "32px",
+                  height: "32px",
+                  borderRadius: "50%",
+                  backgroundColor: "#dc2626",
+                  display: "flex",
+                  alignItems: "center",
+                  justifyContent: "center",
+                  color: "white",
+                  fontWeight: "bold",
+                  fontSize: "14px",
+                }}
+              >
+                {user.email?.charAt(0).toUpperCase()}
+              </div>
             ) : (
-             <>
-  
-    <i className="fas fa-user" style={{ fontSize: "16px" }}></i>
-  
-</>
+              <i className="fas fa-user" style={{ fontSize: "16px" }}></i>
             )}
           </div>
-
           {isDropdownOpen && (
             <div className="dropdown-content" style={{ display: "block" }}>
               {user ? (
                 <>
-                 
                   <button
                     onClick={handleLogout}
                     style={{
