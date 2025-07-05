@@ -103,24 +103,7 @@ export default function Header() {
           >
             {user ? (
               <>
-                <div
-                  style={{
-                    width: "32px",
-                    height: "32px",
-                    borderRadius: "50%",
-                    backgroundColor: "#dc2626",
-                    display: "flex",
-                    alignItems: "center",
-                    justifyContent: "center",
-                    color: "white",
-                    fontWeight: "bold",
-                    fontSize: "14px",
-                    marginRight: "8px",
-                  }}
-                >
-                  {user.email?.charAt(0).toUpperCase()}
-                </div>
-                <span style={{ fontSize: "14px" }}>{user.email?.split("@")[0]}</span>
+               
               </>
             ) : (
              <>
@@ -135,14 +118,7 @@ export default function Header() {
             <div className="dropdown-content" style={{ display: "block" }}>
               {user ? (
                 <>
-                  <Link href="/profile" onClick={() => setIsDropdownOpen(false)}>
-                    <i className="fas fa-user" style={{ marginRight: "8px" }}></i>
-                    Profile
-                  </Link>
-                  <Link href="/orders" onClick={() => setIsDropdownOpen(false)}>
-                    <i className="fas fa-shopping-bag" style={{ marginRight: "8px" }}></i>
-                    My Orders
-                  </Link>
+                 
                   <button
                     onClick={handleLogout}
                     style={{
