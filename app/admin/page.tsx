@@ -124,7 +124,8 @@ function AdminDashboard() {
   const handleLogout = async () => {
     try {
       await signOut()
-      window.location.href = "/"
+      // Redirect to login page instead of homepage
+      window.location.href = "/login?message=logout-success"
     } catch (error) {
       console.error("Logout error:", error)
       toast.error("Failed to logout")
