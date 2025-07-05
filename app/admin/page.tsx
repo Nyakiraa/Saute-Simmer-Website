@@ -519,42 +519,42 @@ export default function AdminDashboard() {
 
   const filteredCustomers = customers.filter(
     (customer) =>
-      customer.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      customer.email.toLowerCase().includes(searchTerm.toLowerCase()),
+      customer.name?.toLowerCase().includes(searchTerm.toLowerCase()) ||
+      customer.email?.toLowerCase().includes(searchTerm.toLowerCase()),
   )
 
   const filteredItems = items.filter(
     (item) =>
-      item.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      item.category.toLowerCase().includes(searchTerm.toLowerCase()),
+      item.name?.toLowerCase().includes(searchTerm.toLowerCase()) ||
+      item.category?.toLowerCase().includes(searchTerm.toLowerCase()),
   )
 
   const filteredMealSets = mealSets.filter(
     (mealSet) =>
-      mealSet.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      mealSet.type.toLowerCase().includes(searchTerm.toLowerCase()),
+      mealSet.name?.toLowerCase().includes(searchTerm.toLowerCase()) ||
+      mealSet.type?.toLowerCase().includes(searchTerm.toLowerCase()),
   )
 
   const filteredCateringServices = cateringServices.filter(
     (service) =>
-      service.customer_name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      service.event_type.toLowerCase().includes(searchTerm.toLowerCase()),
+      service.customer_name?.toLowerCase().includes(searchTerm.toLowerCase()) ||
+      service.event_type?.toLowerCase().includes(searchTerm.toLowerCase()),
   )
 
   const filteredLocations = locations.filter((location) =>
-    location.address.toLowerCase().includes(searchTerm.toLowerCase()),
+    location.address?.toLowerCase().includes(searchTerm.toLowerCase()),
   )
 
   const filteredPayments = payments.filter(
     (payment) =>
-      payment.customer_name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      payment.payment_method.toLowerCase().includes(searchTerm.toLowerCase()),
+      payment.customer_name?.toLowerCase().includes(searchTerm.toLowerCase()) ||
+      payment.payment_method?.toLowerCase().includes(searchTerm.toLowerCase()),
   )
 
   const filteredOrders = orders.filter(
     (order) =>
-      order.customer_name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      order.status.toLowerCase().includes(searchTerm.toLowerCase()),
+      order.customer_name?.toLowerCase().includes(searchTerm.toLowerCase()) ||
+      order.status?.toLowerCase().includes(searchTerm.toLowerCase()),
   )
 
   if (isLoading) {
