@@ -4,7 +4,8 @@ import type React from "react"
 
 import { useState, useEffect } from "react"
 import Image from "next/image"
-import { signInWithGoogle, signInWithFacebook, signInWithEmail, getCurrentUser } from "@/lib/supabase-auth"
+import { signInWithGoogle, signInWithFacebook, signInWithEmail } from "@/lib/supabase-auth"
+import { supabase } from "@/lib/supabase-auth"
 
 export default function LoginPage() {
   const [isCustomer, setIsCustomer] = useState(true)
@@ -19,26 +20,73 @@ export default function LoginPage() {
   // Check if user is already logged in
   useEffect(() => {
     const checkUser = async () => {
-      const user = await getCurrentUser()
-      if (user) {
-        // Get redirect parameter from URL
-        const urlParams = new URLSearchParams(window.location.search)
-        const redirect = urlParams.get("redirect")
+      try {
+        const {
+          data: { session },
+          error,
+        } = await supabase.auth.getSession()
 
-        // User is already logged in, redirect appropriately
-        const allowedAdminEmails = [
-          "ecbathan@gbox.adnu.edu.ph",
-          "rabad@gbox.adnu.edu.ph",
-          "charnepomuceno@gbox.adnu.edu.ph",
-        ]
-        if (allowedAdminEmails.includes(user.email || "")) {
-          window.location.href = redirect || "/admin"
-        } else {
-          window.location.href = redirect || "/"
+        if (error) {
+          console.error("Session check error:", error)
+          return
         }
+
+        if (session?.user) {
+          // Get redirect parameter from URL
+          const urlParams = new URLSearchParams(window.location.search)
+          const redirect = urlParams.get("redirect")
+
+          // User is already logged in, redirect appropriately
+          const allowedAdminEmails = [
+            "ecbathan@gbox.adnu.edu.ph",
+            "rabad@gbox.adnu.edu.ph",
+            "charnepomuceno@gbox.adnu.edu.ph",
+          ]
+          if (allowedAdminEmails.includes(session.user.email || "")) {
+            window.location.href = redirect || "/admin"
+          } else {
+            window.location.href = redirect || "/"
+          }
+        }
+      } catch (error) {
+        console.error("User check failed:", error)
       }
     }
     checkUser()
+  }, [])
+
+  // Show logout success message
+  useEffect(() => {
+    const urlParams = new URLSearchParams(window.location.search)
+    const message = urlParams.get("message")
+
+    if (message === "logout-success") {
+      // Show success message
+      const successDiv = document.createElement("div")
+      successDiv.style.cssText = `
+        position: fixed;
+        top: 20px;
+        right: 20px;
+        background: #4caf50;
+        color: white;
+        padding: 12px 20px;
+        border-radius: 8px;
+        z-index: 9999;
+        font-family: Poppins, sans-serif;
+        box-shadow: 0 4px 12px rgba(0,0,0,0.15);
+      `
+      successDiv.textContent = "Successfully logged out!"
+      document.body.appendChild(successDiv)
+
+      // Remove message after 3 seconds
+      setTimeout(() => {
+        if (document.body.contains(successDiv)) {
+          document.body.removeChild(successDiv)
+        }
+        // Clean up URL
+        window.history.replaceState({}, document.title, window.location.pathname)
+      }, 3000)
+    }
   }, [])
 
   const handleInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
