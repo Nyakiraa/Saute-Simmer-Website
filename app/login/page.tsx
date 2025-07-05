@@ -41,6 +41,18 @@ export default function LoginPage() {
     checkUser()
   }, [])
 
+  // Add this after the existing useEffect
+  useEffect(() => {
+    const urlParams = new URLSearchParams(window.location.search)
+    const message = urlParams.get("message")
+
+    if (message === "logged_out") {
+      alert("You have been successfully logged out.")
+      // Clean up the URL
+      window.history.replaceState({}, document.title, "/login")
+    }
+  }, [])
+
   const handleInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     setFormData({
       ...formData,
