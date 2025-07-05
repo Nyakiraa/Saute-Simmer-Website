@@ -143,7 +143,7 @@ export default function Footer() {
           fontSize: "0.9rem",
         }}
       >
-        <p>&copy; 2025 Saute and Simmer. All rights reserved.</p>
+        <p>&copy; 2025 Abad | Bathan | Nepomuceno Saute and Simmer. All rights reserved.</p>
       </div>
     </footer>
   )
