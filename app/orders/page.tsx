@@ -13,10 +13,18 @@ interface Order {
   event_type: string
   event_date: string
   guest_count: number
-  status: "pending" | "confirmed" | "preparing" | "delivered" | "cancelled"
+  status: string
   location: string
-  special_requests: string
+  special_requests?: string
   created_at: string
+}
+
+interface Customer {
+  id: number
+  name: string
+  email: string
+  phone: string
+  address: string
 }
 
 export default function OrdersPage() {
@@ -24,6 +32,7 @@ export default function OrdersPage() {
   const [orders, setOrders] = useState<Order[]>([])
   const [isLoading, setIsLoading] = useState(true)
   const [user, setUser] = useState<any>(null)
+  const [isAdmin, setIsAdmin] = useState(false)
   const [showSuccess, setShowSuccess] = useState(false)
   const [successOrderId, setSuccessOrderId] = useState<string | null>(null)
 
@@ -67,6 +76,8 @@ export default function OrdersPage() {
     } catch (error) {
       console.error("Auth check failed:", error)
       window.location.href = "/login"
+    } finally {
+      setIsLoading(false)
     }
   }
 
@@ -86,13 +97,11 @@ export default function OrdersPage() {
       }
     } catch (error) {
       console.error("Error loading orders:", error)
-    } finally {
-      setIsLoading(false)
     }
   }
 
   const getStatusColor = (status: string) => {
-    switch (status) {
+    switch (status.toLowerCase()) {
       case "pending":
         return "#f39c12"
       case "confirmed":
@@ -109,7 +118,7 @@ export default function OrdersPage() {
   }
 
   const getStatusIcon = (status: string) => {
-    switch (status) {
+    switch (status.toLowerCase()) {
       case "pending":
         return "fas fa-clock"
       case "confirmed":
