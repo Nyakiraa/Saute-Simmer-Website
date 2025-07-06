@@ -14,9 +14,10 @@ export default function SignupPage() {
     confirmPassword: "",
     fullName: "",
     phone: "",
+    address: "",
   })
 
-  const handleInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+  const handleInputChange = (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) => {
     setFormData({
       ...formData,
       [e.target.name]: e.target.value,
@@ -49,6 +50,7 @@ export default function SignupPage() {
       const { user } = await signUp(formData.email, formData.password, {
         full_name: formData.fullName,
         phone: formData.phone,
+        address: formData.address,
       })
 
       if (user) {
@@ -221,13 +223,14 @@ export default function SignupPage() {
             </div>
 
             <div style={{ marginBottom: "20px" }}>
-              <label style={{ display: "block", marginBottom: "8px", fontWeight: "500" }}>Phone Number</label>
+              <label style={{ display: "block", marginBottom: "8px", fontWeight: "500" }}>Phone Number *</label>
               <input
                 type="tel"
                 name="phone"
                 value={formData.phone}
                 onChange={handleInputChange}
                 placeholder="Enter your phone number"
+                required
                 disabled={isLoading}
                 style={{
                   width: "100%",
@@ -238,6 +241,30 @@ export default function SignupPage() {
                   transition: "border-color 0.3s ease, box-shadow 0.3s ease",
                   fontFamily: "Poppins, sans-serif",
                   opacity: isLoading ? 0.6 : 1,
+                }}
+              />
+            </div>
+
+            <div style={{ marginBottom: "20px" }}>
+              <label style={{ display: "block", marginBottom: "8px", fontWeight: "500" }}>Address *</label>
+              <textarea
+                name="address"
+                value={formData.address}
+                onChange={handleInputChange}
+                placeholder="Enter your complete address"
+                required
+                disabled={isLoading}
+                rows={3}
+                style={{
+                  width: "100%",
+                  padding: "12px 15px",
+                  border: "1px solid #ddd",
+                  borderRadius: "8px",
+                  fontSize: "1rem",
+                  transition: "border-color 0.3s ease, box-shadow 0.3s ease",
+                  fontFamily: "Poppins, sans-serif",
+                  opacity: isLoading ? 0.6 : 1,
+                  resize: "vertical",
                 }}
               />
             </div>
