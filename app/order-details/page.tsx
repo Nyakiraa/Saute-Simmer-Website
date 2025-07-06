@@ -154,8 +154,8 @@ export default function OrderDetailsPage() {
   const getCustomOrderTotal = () => {
     if (!customItems) return 0
     let total = 0
-    Object.values(customItems).forEach((categoryItems) => {
-      categoryItems.forEach((item) => {
+    Object.values(customItems).forEach((categoryItems: MenuItem[]) => {
+      categoryItems.forEach((item: MenuItem) => {
         total += item.price
       })
     })
@@ -166,9 +166,9 @@ export default function OrderDetailsPage() {
     if (!customItems) return ""
     let description = "Custom Meal Selection:\n"
 
-    Object.entries(customItems).forEach(([category, items]) => {
+    Object.entries(customItems).forEach(([category, items]: [string, MenuItem[]]) => {
       if (items.length > 0) {
-        description += `${category.charAt(0).toUpperCase() + category.slice(1)}s: ${items.map((item) => item.name).join(", ")}\n`
+        description += `${category.charAt(0).toUpperCase() + category.slice(1)}s: ${items.map((item: MenuItem) => item.name).join(", ")}\n`
       }
     })
 
@@ -345,7 +345,7 @@ export default function OrderDetailsPage() {
                 >
                   Selected Items
                 </h3>
-                {Object.entries(customItems || {}).map(([category, items]) => {
+                {Object.entries(customItems || {}).map(([category, items]: [string, MenuItem[]]) => {
                   if (items.length === 0) return null
                   return (
                     <div key={category} style={{ marginBottom: "15px" }}>
@@ -359,7 +359,7 @@ export default function OrderDetailsPage() {
                       >
                         {category}s:
                       </h4>
-                      {items.map((item) => (
+                      {items.map((item: MenuItem) => (
                         <div
                           key={item.id}
                           style={{
