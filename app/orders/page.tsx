@@ -131,19 +131,22 @@ export default function OrdersPage() {
         },
       })
 
+      console.log("Orders API response status:", response.status)
+
       if (!response.ok) {
         const errorData = await response.json()
         console.error("Orders API error:", errorData)
-        setError(errorData.error || "Failed to load orders")
+        setError(`Failed to load orders: ${errorData.error}${errorData.details ? ` - ${errorData.details}` : ""}`)
         return
       }
 
       const data = await response.json()
       console.log("Orders loaded successfully:", data.orders?.length || 0)
+      console.log("Orders data:", data.orders)
       setOrders(data.orders || [])
     } catch (error) {
       console.error("Error loading orders:", error)
-      setError("Failed to load orders")
+      setError(`Failed to load orders: ${error instanceof Error ? error.message : "Unknown error"}`)
     } finally {
       setIsLoading(false)
     }
