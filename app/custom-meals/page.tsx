@@ -3,6 +3,7 @@
 import { useState, useEffect } from "react"
 import Header from "../../components/Header"
 import Footer from "../../components/Footer"
+import { supabase } from "@/lib/supabase-auth"
 
 interface MenuItem {
   id: number
@@ -87,15 +88,33 @@ export default function CustomMealsPage() {
     return Object.values(selectedItems).reduce((total, categoryItems) => total + categoryItems.length, 0)
   }
 
-  const handleProceedToOrder = () => {
+  const handleProceedToOrder = async () => {
     if (getTotalItems() === 0) {
       alert("Please select at least one item to proceed.")
       return
     }
 
-    // Convert selected items to URL parameters
-    const itemsData = encodeURIComponent(JSON.stringify(selectedItems))
-    window.location.href = `/orders?custom=true&items=${itemsData}&quantity=${quantity}`
+    // Check if user is logged in
+    try {
+      const {
+        data: { session },
+        error,
+      } = await supabase.auth.getSession()
+
+      if (error || !session) {
+        alert("Please login first to place an order.")
+        window.location.href = "/login?redirect=/custom-meals"
+        return
+      }
+
+      // Convert selected items to URL parameters
+      const itemsData = encodeURIComponent(JSON.stringify(selectedItems))
+      window.location.href = `/order-details?custom=true&items=${itemsData}&quantity=${quantity}`
+    } catch (error) {
+      console.error("Auth check failed:", error)
+      alert("Please login first to place an order.")
+      window.location.href = "/login"
+    }
   }
 
   if (isLoading) {
@@ -126,8 +145,7 @@ export default function CustomMealsPage() {
         }}
       >
         <div style={{ maxWidth: "800px", margin: "0 auto" }}>
-          <h1 style={{ fontSize: "3rem", marginBottom: "20px", fontFamily: "'Cinzel Decorative', serif",
-                    fontWeight: "700" }}>Create Custom Meal</h1>
+          <h1 style={{ fontSize: "3rem", marginBottom: "20px" }}>Create Custom Meal</h1>
           <p style={{ fontSize: "1.2rem", marginBottom: "0", opacity: "0.9" }}>
             Mix and match from our extensive menu to create the perfect meal for your event.
           </p>
