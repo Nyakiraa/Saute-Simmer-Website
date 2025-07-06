@@ -9,14 +9,36 @@ import { supabase } from "@/lib/supabase-auth"
 interface Order {
   id: number
   customer_id: number
-  customer_name: string
-  event_type: string
-  event_date: string
-  guest_count: number
+  order_date: string
+  total_amount: number
   status: string
-  location: string
-  special_requests: string
+  delivery_date: string
+  delivery_address: string
+  special_instructions: string
   created_at: string
+  catering_service?: {
+    id: number
+    event_type: string
+    guest_count: number
+    location: string
+    special_requests: string
+  }
+  location?: {
+    id: number
+    name: string
+    address: string
+    city: string
+    state: string
+    country: string
+  }
+  payment?: {
+    id: number
+    amount: number
+    payment_method: string
+    payment_status: string
+    transaction_id: string
+    payment_date: string | null
+  }
 }
 
 export default function OrdersPage() {
@@ -27,6 +49,7 @@ export default function OrdersPage() {
   const [isAdmin, setIsAdmin] = useState(false)
   const [showSuccess, setShowSuccess] = useState(false)
   const [successOrderId, setSuccessOrderId] = useState<string | null>(null)
+  const [error, setError] = useState<string | null>(null)
 
   useEffect(() => {
     checkUserAndLoadOrders()
@@ -54,27 +77,41 @@ export default function OrdersPage() {
 
   const checkUserAndLoadOrders = async () => {
     try {
+      console.log("=== Orders Page: Checking Authentication ===")
+
       const {
         data: { session },
         error,
       } = await supabase.auth.getSession()
 
-      if (error || !session) {
+      if (error) {
+        console.error("Session error:", error)
         window.location.href = "/login?redirect=/orders"
         return
       }
 
+      if (!session) {
+        console.log("No session found, redirecting to login")
+        window.location.href = "/login?redirect=/orders"
+        return
+      }
+
+      console.log("User authenticated:", session.user.email)
       setUser(session.user)
 
       // Check if user is admin
       const adminEmails = ["ecbathan@gbox.adnu.edu.ph", "rabad@gbox.adnu.edu.ph", "charnepomuceno@gbox.adnu.edu.ph"]
       const userIsAdmin = adminEmails.includes(session.user.email || "")
+      console.log("User is admin:", userIsAdmin)
       setIsAdmin(userIsAdmin)
 
       await loadOrders(session.access_token, userIsAdmin)
     } catch (error) {
       console.error("Auth check failed:", error)
-      window.location.href = "/login"
+      setError("Authentication failed")
+      setTimeout(() => {
+        window.location.href = "/login"
+      }, 2000)
     } finally {
       setIsLoading(false)
     }
@@ -82,20 +119,29 @@ export default function OrdersPage() {
 
   const loadOrders = async (token: string, userIsAdmin: boolean) => {
     try {
+      console.log("=== Loading Orders ===")
+      console.log("User is admin:", userIsAdmin)
+
       const response = await fetch("/api/my-orders", {
         headers: {
           Authorization: `Bearer ${token}`,
         },
       })
 
+      console.log("Orders API response status:", response.status)
+
       if (response.ok) {
         const data = await response.json()
+        console.log("Orders loaded:", data.orders?.length || 0)
         setOrders(data.orders || [])
       } else {
-        console.error("Failed to load orders")
+        const errorData = await response.json()
+        console.error("Failed to load orders:", errorData)
+        setError("Failed to load orders")
       }
     } catch (error) {
       console.error("Error loading orders:", error)
+      setError("Error loading orders")
     }
   }
 
@@ -113,6 +159,21 @@ export default function OrdersPage() {
         return "#8bc34a"
       case "cancelled":
         return "#f44336"
+      default:
+        return "#757575"
+    }
+  }
+
+  const getPaymentStatusColor = (status: string) => {
+    switch (status.toLowerCase()) {
+      case "pending":
+        return "#ff9800"
+      case "paid":
+        return "#4caf50"
+      case "failed":
+        return "#f44336"
+      case "refunded":
+        return "#9c27b0"
       default:
         return "#757575"
     }
@@ -142,6 +203,21 @@ export default function OrdersPage() {
         <Header />
         <div style={{ textAlign: "center", padding: "100px 20px" }}>
           <div style={{ fontSize: "2rem", marginBottom: "20px" }}>Loading your orders...</div>
+        </div>
+        <Footer />
+      </>
+    )
+  }
+
+  if (error) {
+    return (
+      <>
+        <Header />
+        <div style={{ textAlign: "center", padding: "100px 20px" }}>
+          <div style={{ fontSize: "2rem", marginBottom: "20px", color: "var(--danger-color)" }}>{error}</div>
+          <button onClick={() => window.location.reload()} className="btn btn-primary">
+            Retry
+          </button>
         </div>
         <Footer />
       </>
@@ -264,13 +340,8 @@ export default function OrdersPage() {
                       Order #{order.id}
                     </h3>
                     <p style={{ color: "#666", fontSize: "0.95rem", margin: "0" }}>
-                      Placed on {formatDateTime(order.created_at)}
+                      Placed on {formatDateTime(order.order_date)}
                     </p>
-                    {isAdmin && (
-                      <p style={{ color: "#666", fontSize: "0.9rem", margin: "5px 0 0 0" }}>
-                        Customer: {order.customer_name}
-                      </p>
-                    )}
                   </div>
                   <div style={{ textAlign: "right" }}>
                     <div
@@ -287,6 +358,9 @@ export default function OrdersPage() {
                     >
                       {order.status.charAt(0).toUpperCase() + order.status.slice(1)}
                     </div>
+                    <div style={{ fontSize: "1.2rem", fontWeight: "600", color: "var(--primary-color)" }}>
+                      ₱{order.total_amount.toFixed(2)}
+                    </div>
                   </div>
                 </div>
 
@@ -294,22 +368,24 @@ export default function OrdersPage() {
                   style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(250px, 1fr))", gap: "20px" }}
                 >
                   {/* Event Details */}
-                  <div>
-                    <h4 style={{ fontSize: "1rem", color: "var(--primary-color)", marginBottom: "8px" }}>
-                      Event Details
-                    </h4>
-                    <div style={{ fontSize: "0.9rem", color: "#666", lineHeight: "1.6" }}>
-                      <div>
-                        <strong>Type:</strong> {order.event_type}
-                      </div>
-                      <div>
-                        <strong>Date:</strong> {formatDate(order.event_date)}
-                      </div>
-                      <div>
-                        <strong>Guests:</strong> {order.guest_count} persons
+                  {order.catering_service && (
+                    <div>
+                      <h4 style={{ fontSize: "1rem", color: "var(--primary-color)", marginBottom: "8px" }}>
+                        Event Details
+                      </h4>
+                      <div style={{ fontSize: "0.9rem", color: "#666", lineHeight: "1.6" }}>
+                        <div>
+                          <strong>Type:</strong> {order.catering_service.event_type}
+                        </div>
+                        <div>
+                          <strong>Date:</strong> {formatDate(order.delivery_date)}
+                        </div>
+                        <div>
+                          <strong>Guests:</strong> {order.catering_service.guest_count} persons
+                        </div>
                       </div>
                     </div>
-                  </div>
+                  )}
 
                   {/* Delivery Details */}
                   <div>
@@ -318,20 +394,59 @@ export default function OrdersPage() {
                     </h4>
                     <div style={{ fontSize: "0.9rem", color: "#666", lineHeight: "1.6" }}>
                       <div>
-                        <strong>Location:</strong> {order.location}
+                        <strong>Address:</strong> {order.delivery_address}
                       </div>
+                      {order.location && (
+                        <div>
+                          <strong>Location:</strong> {order.location.name}
+                        </div>
+                      )}
                     </div>
                   </div>
+
+                  {/* Payment Details */}
+                  {order.payment && (
+                    <div>
+                      <h4 style={{ fontSize: "1rem", color: "var(--primary-color)", marginBottom: "8px" }}>
+                        Payment Details
+                      </h4>
+                      <div style={{ fontSize: "0.9rem", color: "#666", lineHeight: "1.6" }}>
+                        <div>
+                          <strong>Status:</strong>{" "}
+                          <span
+                            style={{
+                              color: getPaymentStatusColor(order.payment.payment_status),
+                              fontWeight: "600",
+                            }}
+                          >
+                            {order.payment.payment_status.charAt(0).toUpperCase() +
+                              order.payment.payment_status.slice(1)}
+                          </span>
+                        </div>
+                        <div>
+                          <strong>Method:</strong> {order.payment.payment_method}
+                        </div>
+                        <div>
+                          <strong>Transaction ID:</strong> {order.payment.transaction_id}
+                        </div>
+                        {order.payment.payment_date && (
+                          <div>
+                            <strong>Paid on:</strong> {formatDateTime(order.payment.payment_date)}
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                  )}
                 </div>
 
-                {/* Special Requests */}
-                {order.special_requests && (
+                {/* Special Instructions */}
+                {order.special_instructions && (
                   <div style={{ marginTop: "20px", paddingTop: "20px", borderTop: "1px solid #eee" }}>
                     <h4 style={{ fontSize: "1rem", color: "var(--primary-color)", marginBottom: "8px" }}>
-                      Special Requests
+                      Special Instructions
                     </h4>
                     <p style={{ fontSize: "0.9rem", color: "#666", lineHeight: "1.6", margin: "0" }}>
-                      {order.special_requests}
+                      {order.special_instructions}
                     </p>
                   </div>
                 )}
