@@ -4,11 +4,9 @@ import { useSearchParams } from "next/navigation"
 import Header from "../../components/Header"
 import Footer from "../../components/Footer"
 import { supabase } from "@/lib/supabase-auth"
-import type { User } from "@supabase/supabase-js"
 
 interface Order {
   id: number
-  customer_id: number
   customer_name: string
   customer_email: string
   order_type: string
@@ -22,52 +20,44 @@ interface Order {
   contact_number: string
   payment_method: string
   special_requests?: string
-  status: "pending" | "confirmed" | "completed" | "cancelled"
+  status: string
   created_at: string
-}
-
-interface CateringService {
-  id: number
-  customer_id: number
-  customer_name: string
-  event_type: string
-  event_date: string
-  guest_count: number
-  status: "pending" | "confirmed" | "completed" | "cancelled"
-  location: string
-  special_requests?: string
-  type?: string
+  payments?: Array<{
+    id: number
+    amount: number
+    payment_method: string
+    transaction_id?: string
+    payment_date?: string
+    status: string
+  }>
 }
 
 export default function OrdersPage() {
   const searchParams = useSearchParams()
-  const [orders, setOrders] = useState<(Order | CateringService)[]>([])
-  const [user, setUser] = useState<User | null>(null)
-  const [isAdmin, setIsAdmin] = useState(false)
+  const [orders, setOrders] = useState<Order[]>([])
   const [isLoading, setIsLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
-  const [orderSuccess, setOrderSuccess] = useState(false)
+  const [user, setUser] = useState<any>(null)
+  const [showSuccess, setShowSuccess] = useState(false)
   const [successOrderId, setSuccessOrderId] = useState<string | null>(null)
 
   useEffect(() => {
-    checkUserAndLoadOrders()
+    checkAuthAndLoadOrders()
 
     // Check for success parameters
     const success = searchParams?.get("success")
     const orderId = searchParams?.get("orderId")
 
     if (success === "true") {
-      setOrderSuccess(true)
+      setShowSuccess(true)
       setSuccessOrderId(orderId)
     }
   }, [searchParams])
 
-  const checkUserAndLoadOrders = async () => {
+  const checkAuthAndLoadOrders = async () => {
     try {
-      setError(null)
-      console.log("Checking user authentication...")
+      console.log("Checking authentication...")
 
-      // Check if user is logged in
       const {
         data: { session },
         error: sessionError,
@@ -75,38 +65,35 @@ export default function OrdersPage() {
 
       if (sessionError) {
         console.error("Session error:", sessionError)
-        setError("Authentication error")
-        setTimeout(() => {
-          window.location.href = "/login?redirect=/orders"
-        }, 2000)
+        setError("Authentication failed")
         return
       }
 
       if (!session) {
         console.log("No session found, redirecting to login")
-        setTimeout(() => {
-          window.location.href = "/login?redirect=/orders"
-        }, 1000)
+        window.location.href = "/login?redirect=/orders"
         return
       }
 
       console.log("User authenticated:", session.user.email)
       setUser(session.user)
-      await loadUserOrders(session.access_token)
+
+      await loadOrders(session.access_token)
     } catch (error) {
       console.error("Auth check failed:", error)
-      setError("Failed to authenticate user")
-      setTimeout(() => {
-        window.location.href = "/login?redirect=/orders"
-      }, 2000)
+      setError("Failed to authenticate")
     }
   }
 
-  const loadUserOrders = async (accessToken: string) => {
+  const loadOrders = async (accessToken: string) => {
     try {
-      console.log("Loading user orders...")
+      console.log("Loading orders...")
+      setError(null)
+
       const response = await fetch("/api/my-orders", {
+        method: "GET",
         headers: {
+          "Content-Type": "application/json",
           Authorization: `Bearer ${accessToken}`,
         },
       })
@@ -115,23 +102,16 @@ export default function OrdersPage() {
 
       if (response.ok) {
         const data = await response.json()
-        console.log("Orders loaded successfully:", data)
+        console.log("Orders loaded:", data)
         setOrders(data.orders || [])
-        setIsAdmin(data.isAdmin || false)
-      } else if (response.status === 401) {
-        // Session expired, redirect to login
-        console.log("Session expired, redirecting to login")
-        setTimeout(() => {
-          window.location.href = "/login?redirect=/orders"
-        }, 1000)
       } else {
         const errorData = await response.json()
         console.error("Failed to load orders:", errorData)
-        setError(`Failed to load orders: ${errorData.error || "Unknown error"}`)
+        setError(errorData.error || "Failed to fetch orders")
       }
     } catch (error) {
       console.error("Error loading orders:", error)
-      setError("Failed to fetch orders. Please check your connection and try again.")
+      setError("Failed to load orders")
     } finally {
       setIsLoading(false)
     }
@@ -140,94 +120,48 @@ export default function OrdersPage() {
   const handleRetry = () => {
     setIsLoading(true)
     setError(null)
-    checkUserAndLoadOrders()
+    checkAuthAndLoadOrders()
   }
 
-  if (orderSuccess) {
-    return (
-      <>
-        <Header />
-        <section
-          style={{
-            textAlign: "center",
-            padding: "50px 20px",
-            maxWidth: "1400px",
-            margin: "0 auto",
-          }}
-        >
-          <div
-            style={{
-              fontSize: "5rem",
-              color: "var(--success-color)",
-              marginBottom: "20px",
-            }}
-          >
-            <i className="fas fa-check-circle"></i>
-          </div>
-          <h2
-            style={{
-              fontSize: "2rem",
-              marginBottom: "15px",
-              color: "var(--success-color)",
-            }}
-          >
-            Order Placed Successfully!
-          </h2>
-          <p
-            style={{
-              fontSize: "1.2rem",
-              marginBottom: "30px",
-              maxWidth: "600px",
-              marginLeft: "auto",
-              marginRight: "auto",
-            }}
-          >
-            Thank you for your order! Your catering request has been submitted and is pending approval from our admin
-            team. You will receive a confirmation email shortly.
-          </p>
-          {successOrderId && (
-            <div
-              style={{
-                backgroundColor: "#f9f9f9",
-                maxWidth: "500px",
-                margin: "0 auto 30px",
-                padding: "20px",
-                borderRadius: "10px",
-                textAlign: "left",
-              }}
-            >
-              <div style={{ display: "flex", marginBottom: "10px" }}>
-                <div style={{ width: "150px", fontWeight: "500" }}>Order ID:</div>
-                <div style={{ flex: 1 }}>{successOrderId}</div>
-              </div>
-              <div style={{ display: "flex", marginBottom: "10px" }}>
-                <div style={{ width: "150px", fontWeight: "500" }}>Order Date:</div>
-                <div style={{ flex: 1 }}>
-                  {new Date().toLocaleDateString("en-US", { month: "long", day: "numeric", year: "numeric" })}
-                </div>
-              </div>
-            </div>
-          )}
-          <div style={{ marginTop: "30px" }}>
-            <button
-              onClick={() => {
-                setOrderSuccess(false)
-                setSuccessOrderId(null)
-                handleRetry()
-              }}
-              className="btn btn-outline"
-              style={{ marginRight: "10px" }}
-            >
-              View All Orders
-            </button>
-            <button onClick={() => (window.location.href = "/")} className="btn btn-primary">
-              Back to Home
-            </button>
-          </div>
-        </section>
-        <Footer />
-      </>
-    )
+  const formatDate = (dateString: string) => {
+    try {
+      return new Date(dateString).toLocaleDateString("en-US", {
+        year: "numeric",
+        month: "long",
+        day: "numeric",
+      })
+    } catch {
+      return dateString
+    }
+  }
+
+  const formatDateTime = (dateString: string) => {
+    try {
+      return new Date(dateString).toLocaleString("en-US", {
+        year: "numeric",
+        month: "short",
+        day: "numeric",
+        hour: "2-digit",
+        minute: "2-digit",
+      })
+    } catch {
+      return dateString
+    }
+  }
+
+  const getStatusColor = (status: string) => {
+    switch (status.toLowerCase()) {
+      case "pending":
+        return "#f39c12"
+      case "confirmed":
+        return "#27ae60"
+      case "delivered":
+        return "#2ecc71"
+      case "cancelled":
+        return "#e74c3c"
+      default:
+        return "#95a5a6"
+    }
   }
 
   if (isLoading) {
@@ -235,7 +169,8 @@ export default function OrdersPage() {
       <>
         <Header />
         <div style={{ textAlign: "center", padding: "100px 20px" }}>
-          <div style={{ fontSize: "2rem", marginBottom: "20px" }}>Loading orders...</div>
+          <div style={{ fontSize: "2rem", marginBottom: "20px" }}>Loading your orders...</div>
+          <div style={{ fontSize: "1rem", color: "#666" }}>Please wait while we fetch your order history.</div>
         </div>
         <Footer />
       </>
@@ -247,7 +182,9 @@ export default function OrdersPage() {
       <>
         <Header />
         <div style={{ textAlign: "center", padding: "100px 20px" }}>
-          <div style={{ fontSize: "2rem", marginBottom: "20px", color: "var(--danger-color)" }}>{error}</div>
+          <div style={{ fontSize: "2rem", marginBottom: "20px", color: "var(--danger-color)" }}>
+            Failed to load orders: {error}
+          </div>
           <button onClick={handleRetry} className="btn btn-primary">
             Try Again
           </button>
@@ -260,230 +197,197 @@ export default function OrdersPage() {
   return (
     <>
       <Header />
-      {/* Order History Section */}
       <section style={{ maxWidth: "1400px", margin: "40px auto", padding: "0 5%" }}>
-        <h2
-          style={{
-            fontSize: "1.8rem",
-            marginBottom: "10px",
-            color: "var(--primary-color)",
-            textAlign: "center",
-          }}
-        >
-          {isAdmin ? "All Orders & Catering Services" : "My Orders"}
-        </h2>
-        {isAdmin && (
-          <p style={{ textAlign: "center", color: "#666", marginBottom: "20px" }}>
-            Admin View - Showing all customer orders
-          </p>
+        {showSuccess && (
+          <div
+            style={{
+              backgroundColor: "#d4edda",
+              border: "1px solid #c3e6cb",
+              borderRadius: "8px",
+              padding: "20px",
+              marginBottom: "30px",
+              color: "#155724",
+              textAlign: "center",
+            }}
+          >
+            <h3 style={{ margin: "0 0 10px 0", fontSize: "1.5rem" }}>
+              <i className="fas fa-check-circle" style={{ marginRight: "10px" }}></i>
+              Order Placed Successfully!
+            </h3>
+            <p style={{ margin: "0", fontSize: "1.1rem" }}>
+              Your order {successOrderId ? `#${successOrderId}` : ""} has been submitted and is pending approval.
+            </p>
+          </div>
         )}
-        <div style={{ display: "flex", justifyContent: "center", marginBottom: "30px" }}>
-          <button onClick={() => (window.location.href = "/meals")} className="btn btn-primary">
-            Place New Order
-          </button>
-        </div>
-        <div
-          style={{
-            display: "grid",
-            gridTemplateColumns: "repeat(auto-fill, minmax(350px, 1fr))",
-            gap: "30px",
-          }}
-        >
-          {orders.length > 0 ? (
-            orders.map((order) => {
-              // Check if it's a new order or legacy catering service
-              const isNewOrder = "order_type" in order
 
-              return (
-                <div
-                  key={`${isNewOrder ? "order" : "catering"}-${order.id}`}
-                  style={{
-                    backgroundColor: "var(--light-text)",
-                    borderRadius: "15px",
-                    overflow: "hidden",
-                    boxShadow: "0 10px 20px var(--shadow-color)",
-                    transition: "transform 0.3s ease",
-                    cursor: "pointer",
-                  }}
-                  onClick={() => {
-                    if (isNewOrder) {
-                      alert(
-                        `Order #${order.id} details:\n\nType: ${(order as Order).order_type}\nTotal: ₱${(order as Order).total_amount}\nPayment: ${(order as Order).payment_method}`,
-                      )
-                    } else {
-                      alert(`Service details for ${order.customer_name} will be shown here.`)
-                    }
-                  }}
-                >
-                  <div
-                    style={{
-                      padding: "20px",
-                      borderBottom: "1px solid #eee",
-                      display: "flex",
-                      justifyContent: "space-between",
-                      alignItems: "center",
-                    }}
-                  >
-                    <div style={{ fontWeight: "600", color: "var(--primary-color)" }}>
-                      #{order.id} {isNewOrder && `(${(order as Order).order_type})`}
+        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "30px" }}>
+          <h1 style={{ fontSize: "2.5rem", color: "var(--primary-color)", margin: 0 }}>My Orders</h1>
+          <div style={{ fontSize: "1rem", color: "#666" }}>{user?.email && `Logged in as: ${user.email}`}</div>
+        </div>
+
+        {orders.length === 0 ? (
+          <div
+            style={{
+              textAlign: "center",
+              padding: "60px 20px",
+              backgroundColor: "var(--light-text)",
+              borderRadius: "15px",
+              boxShadow: "0 10px 20px var(--shadow-color)",
+            }}
+          >
+            <div style={{ fontSize: "4rem", color: "#ddd", marginBottom: "20px" }}>
+              <i className="fas fa-shopping-bag"></i>
+            </div>
+            <h2 style={{ fontSize: "1.8rem", marginBottom: "15px", color: "#666" }}>No Orders Yet</h2>
+            <p style={{ fontSize: "1.1rem", marginBottom: "30px", color: "#888" }}>
+              You haven't placed any orders yet. Start by exploring our meal sets or creating a custom meal.
+            </p>
+            <div>
+              <button
+                onClick={() => (window.location.href = "/meals")}
+                className="btn btn-primary"
+                style={{ marginRight: "10px" }}
+              >
+                Browse Meal Sets
+              </button>
+              <button onClick={() => (window.location.href = "/custom-meals")} className="btn btn-outline">
+                Create Custom Meal
+              </button>
+            </div>
+          </div>
+        ) : (
+          <div style={{ display: "grid", gap: "20px" }}>
+            {orders.map((order) => (
+              <div
+                key={order.id}
+                style={{
+                  backgroundColor: "var(--light-text)",
+                  borderRadius: "15px",
+                  padding: "25px",
+                  boxShadow: "0 10px 20px var(--shadow-color)",
+                  border: "1px solid #eee",
+                }}
+              >
+                <div style={{ display: "grid", gridTemplateColumns: "1fr auto", gap: "20px", marginBottom: "20px" }}>
+                  <div>
+                    <div style={{ display: "flex", alignItems: "center", marginBottom: "10px" }}>
+                      <h3 style={{ fontSize: "1.3rem", margin: "0", color: "var(--primary-color)" }}>
+                        Order #{order.id}
+                      </h3>
+                      <span
+                        style={{
+                          marginLeft: "15px",
+                          padding: "4px 12px",
+                          borderRadius: "20px",
+                          fontSize: "0.8rem",
+                          fontWeight: "600",
+                          textTransform: "uppercase",
+                          backgroundColor: getStatusColor(order.status),
+                          color: "white",
+                        }}
+                      >
+                        {order.status}
+                      </span>
+                    </div>
+                    <div style={{ fontSize: "0.9rem", color: "#666", marginBottom: "5px" }}>
+                      Placed on {formatDateTime(order.created_at)}
+                    </div>
+                    <div style={{ fontSize: "0.9rem", color: "#666" }}>Event Date: {formatDate(order.event_date)}</div>
+                  </div>
+                  <div style={{ textAlign: "right" }}>
+                    <div style={{ fontSize: "1.5rem", fontWeight: "600", color: "var(--primary-color)" }}>
+                      ₱{order.total_amount.toFixed(2)}
                     </div>
                     <div style={{ fontSize: "0.9rem", color: "#666" }}>
-                      {new Date(
-                        isNewOrder ? (order as Order).event_date : (order as CateringService).event_date,
-                      ).toLocaleDateString("en-US", {
-                        month: "long",
-                        day: "numeric",
-                        year: "numeric",
-                      })}
-                    </div>
-                  </div>
-                  <div style={{ padding: "20px" }}>
-                    <div style={{ marginBottom: "15px" }}>
-                      <div style={{ display: "flex", marginBottom: "8px" }}>
-                        <div style={{ width: "120px", fontWeight: "500", fontSize: "0.9rem" }}>Customer:</div>
-                        <div style={{ flex: 1, fontSize: "0.9rem" }}>{order.customer_name}</div>
-                      </div>
-                      <div style={{ display: "flex", marginBottom: "8px" }}>
-                        <div style={{ width: "120px", fontWeight: "500", fontSize: "0.9rem" }}>Event Type:</div>
-                        <div style={{ flex: 1, fontSize: "0.9rem" }}>{order.event_type}</div>
-                      </div>
-                      {isNewOrder && (
-                        <>
-                          <div style={{ display: "flex", marginBottom: "8px" }}>
-                            <div style={{ width: "120px", fontWeight: "500", fontSize: "0.9rem" }}>Meal Set:</div>
-                            <div style={{ flex: 1, fontSize: "0.9rem" }}>
-                              {(order as Order).meal_set_name || "Custom Order"}
-                            </div>
-                          </div>
-                          <div style={{ display: "flex", marginBottom: "8px" }}>
-                            <div style={{ width: "120px", fontWeight: "500", fontSize: "0.9rem" }}>Quantity:</div>
-                            <div style={{ flex: 1, fontSize: "0.9rem" }}>{(order as Order).quantity} persons</div>
-                          </div>
-                          <div style={{ display: "flex", marginBottom: "8px" }}>
-                            <div style={{ width: "120px", fontWeight: "500", fontSize: "0.9rem" }}>Total:</div>
-                            <div
-                              style={{ flex: 1, fontSize: "0.9rem", fontWeight: "600", color: "var(--primary-color)" }}
-                            >
-                              ₱{(order as Order).total_amount?.toFixed(2) || "0.00"}
-                            </div>
-                          </div>
-                          <div style={{ display: "flex", marginBottom: "8px" }}>
-                            <div style={{ width: "120px", fontWeight: "500", fontSize: "0.9rem" }}>Payment:</div>
-                            <div style={{ flex: 1, fontSize: "0.9rem", textTransform: "capitalize" }}>
-                              {(order as Order).payment_method || "Not specified"}
-                            </div>
-                          </div>
-                        </>
-                      )}
-                      {!isNewOrder && (
-                        <>
-                          <div style={{ display: "flex", marginBottom: "8px" }}>
-                            <div style={{ width: "120px", fontWeight: "500", fontSize: "0.9rem" }}>Guests:</div>
-                            <div style={{ flex: 1, fontSize: "0.9rem" }}>
-                              {(order as CateringService).guest_count} persons
-                            </div>
-                          </div>
-                          <div style={{ display: "flex", marginBottom: "8px" }}>
-                            <div style={{ width: "120px", fontWeight: "500", fontSize: "0.9rem" }}>Location:</div>
-                            <div style={{ flex: 1, fontSize: "0.9rem" }}>{(order as CateringService).location}</div>
-                          </div>
-                        </>
-                      )}
-                      {order.special_requests && (
-                        <div style={{ display: "flex", marginBottom: "8px" }}>
-                          <div style={{ width: "120px", fontWeight: "500", fontSize: "0.9rem" }}>Special Requests:</div>
-                          <div style={{ flex: 1, fontSize: "0.9rem" }}>{order.special_requests}</div>
-                        </div>
-                      )}
-                    </div>
-                  </div>
-                  <div
-                    style={{
-                      padding: "15px 20px",
-                      backgroundColor: "#f9f9f9",
-                      display: "flex",
-                      justifyContent: "flex-end",
-                      alignItems: "center",
-                    }}
-                  >
-                    <div
-                      style={{
-                        padding: "5px 15px",
-                        borderRadius: "50px",
-                        fontSize: "0.8rem",
-                        fontWeight: "500",
-                        backgroundColor:
-                          order.status === "confirmed"
-                            ? "var(--success-color)"
-                            : order.status === "pending"
-                              ? "var(--warning-color)"
-                              : order.status === "completed"
-                                ? "#2196f3"
-                                : "var(--danger-color)",
-                        color: "var(--light-text)",
-                      }}
-                    >
-                      {order.status.charAt(0).toUpperCase() + order.status.slice(1)}
+                      {order.quantity} person{order.quantity > 1 ? "s" : ""}
                     </div>
                   </div>
                 </div>
-              )
-            })
-          ) : (
-            <div
-              style={{
-                gridColumn: "1 / -1",
-                textAlign: "center",
-                padding: "50px 20px",
-              }}
-            >
-              <div
-                style={{
-                  fontSize: "5rem",
-                  color: "#ddd",
-                  marginBottom: "20px",
-                }}
-              >
-                <i className="fas fa-clipboard-list"></i>
+
+                <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "20px", marginBottom: "20px" }}>
+                  <div>
+                    <h4 style={{ fontSize: "1rem", margin: "0 0 10px 0", color: "var(--primary-color)" }}>
+                      Order Details
+                    </h4>
+                    <div style={{ fontSize: "0.9rem", marginBottom: "5px" }}>
+                      <strong>Type:</strong> {order.order_type === "meal_set" ? "Meal Set" : "Custom Meal"}
+                    </div>
+                    {order.meal_set_name && (
+                      <div style={{ fontSize: "0.9rem", marginBottom: "5px" }}>
+                        <strong>Meal Set:</strong> {order.meal_set_name}
+                      </div>
+                    )}
+                    <div style={{ fontSize: "0.9rem", marginBottom: "5px" }}>
+                      <strong>Event Type:</strong> {order.event_type}
+                    </div>
+                    <div style={{ fontSize: "0.9rem", marginBottom: "5px" }}>
+                      <strong>Payment Method:</strong>{" "}
+                      <span style={{ textTransform: "capitalize" }}>{order.payment_method}</span>
+                    </div>
+                  </div>
+                  <div>
+                    <h4 style={{ fontSize: "1rem", margin: "0 0 10px 0", color: "var(--primary-color)" }}>
+                      Contact Information
+                    </h4>
+                    <div style={{ fontSize: "0.9rem", marginBottom: "5px" }}>
+                      <strong>Contact Person:</strong> {order.contact_person}
+                    </div>
+                    <div style={{ fontSize: "0.9rem", marginBottom: "5px" }}>
+                      <strong>Phone:</strong> {order.contact_number}
+                    </div>
+                    <div style={{ fontSize: "0.9rem", marginBottom: "5px" }}>
+                      <strong>Email:</strong> {order.customer_email}
+                    </div>
+                  </div>
+                </div>
+
+                <div style={{ marginBottom: "15px" }}>
+                  <h4 style={{ fontSize: "1rem", margin: "0 0 10px 0", color: "var(--primary-color)" }}>
+                    Delivery Address
+                  </h4>
+                  <div style={{ fontSize: "0.9rem", color: "#666" }}>{order.delivery_address}</div>
+                </div>
+
+                {order.special_requests && (
+                  <div style={{ marginBottom: "15px" }}>
+                    <h4 style={{ fontSize: "1rem", margin: "0 0 10px 0", color: "var(--primary-color)" }}>
+                      Special Requests
+                    </h4>
+                    <div style={{ fontSize: "0.9rem", color: "#666" }}>{order.special_requests}</div>
+                  </div>
+                )}
+
+                {order.payments && order.payments.length > 0 && (
+                  <div style={{ marginTop: "20px", paddingTop: "20px", borderTop: "1px solid #eee" }}>
+                    <h4 style={{ fontSize: "1rem", margin: "0 0 10px 0", color: "var(--primary-color)" }}>
+                      Payment Information
+                    </h4>
+                    {order.payments.map((payment) => (
+                      <div key={payment.id} style={{ fontSize: "0.9rem", marginBottom: "5px" }}>
+                        <div style={{ display: "flex", justifyContent: "space-between" }}>
+                          <span>
+                            <strong>Amount:</strong> ₱{payment.amount.toFixed(2)}
+                          </span>
+                          <span>
+                            <strong>Status:</strong>{" "}
+                            <span style={{ textTransform: "capitalize", color: getStatusColor(payment.status) }}>
+                              {payment.status}
+                            </span>
+                          </span>
+                        </div>
+                        {payment.transaction_id && (
+                          <div style={{ fontSize: "0.8rem", color: "#666" }}>
+                            Transaction ID: {payment.transaction_id}
+                          </div>
+                        )}
+                      </div>
+                    ))}
+                  </div>
+                )}
               </div>
-              <h3
-                style={{
-                  fontSize: "1.5rem",
-                  marginBottom: "15px",
-                  color: "#666",
-                }}
-              >
-                {isAdmin ? "No Orders in System" : "No Orders Yet"}
-              </h3>
-              <p
-                style={{
-                  fontSize: "1rem",
-                  marginBottom: "30px",
-                  maxWidth: "600px",
-                  marginLeft: "auto",
-                  marginRight: "auto",
-                  color: "#888",
-                }}
-              >
-                {isAdmin
-                  ? "No customers have placed any orders yet."
-                  : "You haven't placed any orders yet. Browse our meal sets or create a custom meal to get started."}
-              </p>
-              <div>
-                <button
-                  onClick={() => (window.location.href = "/meals")}
-                  className="btn btn-primary"
-                  style={{ marginRight: "10px" }}
-                >
-                  Browse Meal Sets
-                </button>
-                <button onClick={() => (window.location.href = "/custom-meals")} className="btn btn-outline">
-                  Create Custom Meal
-                </button>
-              </div>
-            </div>
-          )}
-        </div>
+            ))}
+          </div>
+        )}
       </section>
       <Footer />
     </>
