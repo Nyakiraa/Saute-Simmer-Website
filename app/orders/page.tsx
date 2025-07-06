@@ -9,36 +9,14 @@ import { supabase } from "@/lib/supabase-auth"
 interface Order {
   id: number
   customer_id: number
-  order_date: string
-  total_amount: number
+  customer_name: string
+  event_type: string
+  event_date: string
+  guest_count: number
   status: string
-  delivery_date: string
-  delivery_address: string
-  special_instructions: string
+  location: string
+  special_requests: string
   created_at: string
-  catering_service?: {
-    id: number
-    event_type: string
-    guest_count: number
-    location: string
-    special_requests: string
-  }
-  location?: {
-    id: number
-    name: string
-    address: string
-    city: string
-    state: string
-    country: string
-  }
-  payment?: {
-    id: number
-    amount: number
-    payment_method: string
-    payment_status: string
-    transaction_id: string
-    payment_date: string | null
-  }
 }
 
 export default function OrdersPage() {
@@ -135,21 +113,6 @@ export default function OrdersPage() {
         return "#8bc34a"
       case "cancelled":
         return "#f44336"
-      default:
-        return "#757575"
-    }
-  }
-
-  const getPaymentStatusColor = (status: string) => {
-    switch (status.toLowerCase()) {
-      case "pending":
-        return "#ff9800"
-      case "paid":
-        return "#4caf50"
-      case "failed":
-        return "#f44336"
-      case "refunded":
-        return "#9c27b0"
       default:
         return "#757575"
     }
@@ -301,8 +264,13 @@ export default function OrdersPage() {
                       Order #{order.id}
                     </h3>
                     <p style={{ color: "#666", fontSize: "0.95rem", margin: "0" }}>
-                      Placed on {formatDateTime(order.order_date)}
+                      Placed on {formatDateTime(order.created_at)}
                     </p>
+                    {isAdmin && (
+                      <p style={{ color: "#666", fontSize: "0.9rem", margin: "5px 0 0 0" }}>
+                        Customer: {order.customer_name}
+                      </p>
+                    )}
                   </div>
                   <div style={{ textAlign: "right" }}>
                     <div
@@ -319,9 +287,6 @@ export default function OrdersPage() {
                     >
                       {order.status.charAt(0).toUpperCase() + order.status.slice(1)}
                     </div>
-                    <div style={{ fontSize: "1.2rem", fontWeight: "600", color: "var(--primary-color)" }}>
-                      ₱{order.total_amount.toFixed(2)}
-                    </div>
                   </div>
                 </div>
 
@@ -329,24 +294,22 @@ export default function OrdersPage() {
                   style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(250px, 1fr))", gap: "20px" }}
                 >
                   {/* Event Details */}
-                  {order.catering_service && (
-                    <div>
-                      <h4 style={{ fontSize: "1rem", color: "var(--primary-color)", marginBottom: "8px" }}>
-                        Event Details
-                      </h4>
-                      <div style={{ fontSize: "0.9rem", color: "#666", lineHeight: "1.6" }}>
-                        <div>
-                          <strong>Type:</strong> {order.catering_service.event_type}
-                        </div>
-                        <div>
-                          <strong>Date:</strong> {formatDate(order.delivery_date)}
-                        </div>
-                        <div>
-                          <strong>Guests:</strong> {order.catering_service.guest_count} persons
-                        </div>
+                  <div>
+                    <h4 style={{ fontSize: "1rem", color: "var(--primary-color)", marginBottom: "8px" }}>
+                      Event Details
+                    </h4>
+                    <div style={{ fontSize: "0.9rem", color: "#666", lineHeight: "1.6" }}>
+                      <div>
+                        <strong>Type:</strong> {order.event_type}
+                      </div>
+                      <div>
+                        <strong>Date:</strong> {formatDate(order.event_date)}
+                      </div>
+                      <div>
+                        <strong>Guests:</strong> {order.guest_count} persons
                       </div>
                     </div>
-                  )}
+                  </div>
 
                   {/* Delivery Details */}
                   <div>
@@ -355,59 +318,20 @@ export default function OrdersPage() {
                     </h4>
                     <div style={{ fontSize: "0.9rem", color: "#666", lineHeight: "1.6" }}>
                       <div>
-                        <strong>Address:</strong> {order.delivery_address}
+                        <strong>Location:</strong> {order.location}
                       </div>
-                      {order.location && (
-                        <div>
-                          <strong>Location:</strong> {order.location.name}
-                        </div>
-                      )}
                     </div>
                   </div>
-
-                  {/* Payment Details */}
-                  {order.payment && (
-                    <div>
-                      <h4 style={{ fontSize: "1rem", color: "var(--primary-color)", marginBottom: "8px" }}>
-                        Payment Details
-                      </h4>
-                      <div style={{ fontSize: "0.9rem", color: "#666", lineHeight: "1.6" }}>
-                        <div>
-                          <strong>Status:</strong>{" "}
-                          <span
-                            style={{
-                              color: getPaymentStatusColor(order.payment.payment_status),
-                              fontWeight: "600",
-                            }}
-                          >
-                            {order.payment.payment_status.charAt(0).toUpperCase() +
-                              order.payment.payment_status.slice(1)}
-                          </span>
-                        </div>
-                        <div>
-                          <strong>Method:</strong> {order.payment.payment_method}
-                        </div>
-                        <div>
-                          <strong>Transaction ID:</strong> {order.payment.transaction_id}
-                        </div>
-                        {order.payment.payment_date && (
-                          <div>
-                            <strong>Paid on:</strong> {formatDateTime(order.payment.payment_date)}
-                          </div>
-                        )}
-                      </div>
-                    </div>
-                  )}
                 </div>
 
-                {/* Special Instructions */}
-                {order.special_instructions && (
+                {/* Special Requests */}
+                {order.special_requests && (
                   <div style={{ marginTop: "20px", paddingTop: "20px", borderTop: "1px solid #eee" }}>
                     <h4 style={{ fontSize: "1rem", color: "var(--primary-color)", marginBottom: "8px" }}>
-                      Special Instructions
+                      Special Requests
                     </h4>
                     <p style={{ fontSize: "0.9rem", color: "#666", lineHeight: "1.6", margin: "0" }}>
-                      {order.special_instructions}
+                      {order.special_requests}
                     </p>
                   </div>
                 )}
