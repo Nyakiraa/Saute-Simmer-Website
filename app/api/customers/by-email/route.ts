@@ -17,7 +17,7 @@ export async function GET(request: NextRequest) {
       if (error.code === "PGRST116") {
         return NextResponse.json({ error: "Customer not found" }, { status: 404 })
       }
-      console.error("Error fetching customer:", error)
+      console.error("Error fetching customer by email:", error)
       return NextResponse.json({ error: "Failed to fetch customer" }, { status: 500 })
     }
 
