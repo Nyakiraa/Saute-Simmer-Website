@@ -122,9 +122,10 @@ export async function POST(request: NextRequest) {
       payment_method: body.payment_method,
       special_requests: body.special_requests,
       status: "pending",
+      order_date: new Date().toISOString().split("T")[0],
     }
 
-    console.log("Inserting meal set order with data:", orderData)
+    console.log("Inserting order with data:", orderData)
 
     const { data: order, error: orderError } = await supabase.from("orders").insert([orderData]).select().single()
 
@@ -133,14 +134,15 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: "Failed to create order", details: orderError }, { status: 500 })
     }
 
-    console.log("Meal set order created successfully:", order)
+    console.log("Order created successfully:", order)
 
     // Create payment record
     const paymentData = {
       order_id: order.id,
+      customer_id: customer.id,
+      customer_name: customer.name,
       amount: totalAmount,
       payment_method: body.payment_method,
-      status: "pending",
       transaction_id: `TXN-${order.id}-${Date.now()}`,
       payment_date: new Date().toISOString(),
     }
@@ -163,7 +165,6 @@ export async function POST(request: NextRequest) {
         success: true,
         order,
         payment,
-        mealSet,
         message: "Meal set order created successfully",
       },
       { status: 201 },
