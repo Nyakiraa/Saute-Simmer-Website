@@ -4,10 +4,7 @@ import { createServerClient } from "@/lib/supabase"
 export async function GET() {
   try {
     const supabase = createServerClient()
-    const { data: mealSets, error } = await supabase
-      .from("meal_sets")
-      .select("*")
-      .order("created_at", { ascending: false })
+    const { data: mealSets, error } = await supabase.from("meal_sets").select("*").order("price", { ascending: true })
 
     if (error) {
       console.error("Error fetching meal sets:", error)
@@ -25,6 +22,11 @@ export async function POST(request: NextRequest) {
   try {
     const supabase = createServerClient()
     const body = await request.json()
+
+    // Validate required fields
+    if (!body.name || !body.type || !body.price) {
+      return NextResponse.json({ error: "Name, type, and price are required" }, { status: 400 })
+    }
 
     const { data: mealSet, error } = await supabase.from("meal_sets").insert([body]).select().single()
 
