@@ -107,8 +107,8 @@ export default function LoginPage() {
     }
 
     try {
-      const { user } = await signInWithEmail(formData.email, formData.password)
-      if (user) {
+      const result = await signInWithEmail(formData.email, formData.password)
+      if (result) {
         // Get redirect parameter from URL
         const urlParams = new URLSearchParams(window.location.search)
         const redirect = urlParams.get("redirect")
@@ -119,7 +119,7 @@ export default function LoginPage() {
           "rabad@gbox.adnu.edu.ph",
           "charnepomuceno@gbox.adnu.edu.ph",
         ]
-        if (allowedAdminEmails.includes(user.email || "")) {
+        if (allowedAdminEmails.includes(formData.email)) {
           window.location.href = redirect || "/admin"
         } else {
           window.location.href = redirect || "/"
@@ -144,8 +144,8 @@ export default function LoginPage() {
     }
 
     try {
-      const { user } = await signInWithEmail(formData.adminEmail, formData.adminPassword)
-      if (user) {
+      const result = await signInWithEmail(formData.adminEmail, formData.adminPassword)
+      if (result) {
         // Get redirect parameter from URL
         const urlParams = new URLSearchParams(window.location.search)
         const redirect = urlParams.get("redirect")
@@ -157,7 +157,7 @@ export default function LoginPage() {
           "charnepomuceno@gbox.adnu.edu.ph",
         ]
 
-        if (allowedAdminEmails.includes(user.email || "")) {
+        if (allowedAdminEmails.includes(formData.adminEmail)) {
           window.location.href = redirect || "/admin"
         } else {
           alert("Access denied. Admin privileges required.")
