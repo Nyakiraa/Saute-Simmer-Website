@@ -39,43 +39,24 @@ export async function GET(request: NextRequest) {
     console.log("User is admin:", isAdmin)
 
     // Get customer record
-    const { data: customer, error: customerError } = await supabase
-      .from("customers")
-      .select("*")
-      .eq("email", user.email)
-      .single()
+    let customer = null
+    if (!isAdmin) {
+      const { data: customerData, error: customerError } = await supabase
+        .from("customers")
+        .select("*")
+        .eq("email", user.email)
+        .single()
 
-    if (customerError && !isAdmin) {
-      console.error("Customer lookup error:", customerError)
-      return NextResponse.json({ error: "Customer record not found" }, { status: 404 })
+      if (customerError) {
+        console.error("Customer lookup error:", customerError)
+        return NextResponse.json({ error: "Customer record not found" }, { status: 404 })
+      }
+      customer = customerData
     }
 
-    let ordersQuery = supabase.from("orders").select(`
-      *,
-      catering_services!inner(
-        id,
-        event_type,
-        guest_count,
-        location,
-        special_requests
-      ),
-      locations(
-        id,
-        name,
-        address,
-        city,
-        state,
-        country
-      ),
-      payments(
-        id,
-        amount,
-        payment_method,
-        payment_status,
-        transaction_id,
-        payment_date
-      )
-    `)
+    // Start with a simple orders query
+    console.log("Fetching orders...")
+    let ordersQuery = supabase.from("orders").select("*")
 
     // If not admin, filter by customer
     if (!isAdmin && customer) {
@@ -85,27 +66,58 @@ export async function GET(request: NextRequest) {
     // Order by creation date (newest first)
     ordersQuery = ordersQuery.order("created_at", { ascending: false })
 
-    console.log("Executing orders query...")
     const { data: orders, error: ordersError } = await ordersQuery
 
     if (ordersError) {
       console.error("Orders query error:", ordersError)
-      return NextResponse.json({ error: "Failed to fetch orders" }, { status: 500 })
+      return NextResponse.json({ error: "Failed to fetch orders", details: ordersError.message }, { status: 500 })
     }
 
     console.log("Orders fetched successfully:", orders?.length || 0)
 
-    // Transform the data to match the expected format
-    const transformedOrders = orders?.map((order) => ({
-      ...order,
-      catering_service: order.catering_services?.[0] || null,
-      location: order.locations?.[0] || null,
-      payment: order.payments?.[0] || null,
-    }))
+    // Now fetch related data for each order
+    const enrichedOrders = []
+
+    for (const order of orders || []) {
+      try {
+        // Get catering service
+        const { data: cateringService } = await supabase
+          .from("catering_services")
+          .select("*")
+          .eq("order_id", order.id)
+          .single()
+
+        // Get location
+        const { data: location } = await supabase
+          .from("locations")
+          .select("*")
+          .eq("id", cateringService?.location_id)
+          .single()
+
+        // Get payment
+        const { data: payment } = await supabase.from("payments").select("*").eq("order_id", order.id).single()
+
+        enrichedOrders.push({
+          ...order,
+          catering_service: cateringService || null,
+          location: location || null,
+          payment: payment || null,
+        })
+      } catch (error) {
+        console.error("Error enriching order:", order.id, error)
+        // Still include the order even if related data fails
+        enrichedOrders.push({
+          ...order,
+          catering_service: null,
+          location: null,
+          payment: null,
+        })
+      }
+    }
 
     return NextResponse.json({
       success: true,
-      orders: transformedOrders || [],
+      orders: enrichedOrders,
       isAdmin,
     })
   } catch (error) {
