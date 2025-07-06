@@ -233,7 +233,7 @@ export default function OrderDetailsPage() {
         window.location.href = `/orders?success=true&orderId=${result.order.id}`
       } else {
         const error = await response.json()
-        alert(error.message || "Failed to place order. Please try again.")
+        alert(error.error || "Failed to place order. Please try again.")
       }
     } catch (error) {
       console.error("Order submission failed:", error)
