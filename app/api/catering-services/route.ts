@@ -6,7 +6,14 @@ export async function GET() {
     const supabase = createServerClient()
     const { data: cateringServices, error } = await supabase
       .from("catering_services")
-      .select("*")
+      .select(`
+        *,
+        customers (
+          name,
+          email,
+          phone
+        )
+      `)
       .order("created_at", { ascending: false })
 
     if (error) {
@@ -25,6 +32,14 @@ export async function POST(request: NextRequest) {
   try {
     const supabase = createServerClient()
     const body = await request.json()
+
+    // Validate required fields
+    if (!body.customer_name || !body.event_type || !body.event_date || !body.guest_count || !body.location) {
+      return NextResponse.json(
+        { error: "Customer name, event type, event date, guest count, and location are required" },
+        { status: 400 },
+      )
+    }
 
     const { data: cateringService, error } = await supabase.from("catering_services").insert([body]).select().single()
 
