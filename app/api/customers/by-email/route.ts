@@ -15,11 +15,15 @@ export async function GET(request: NextRequest) {
     const { data: customer, error } = await supabase.from("customers").select("*").eq("email", email).single()
 
     if (error) {
+      if (error.code === "PGRST116") {
+        // No rows returned
+        return NextResponse.json({ customer: null })
+      }
       console.error("Error fetching customer:", error)
-      return NextResponse.json({ error: "Customer not found" }, { status: 404 })
+      return NextResponse.json({ error: "Failed to fetch customer" }, { status: 500 })
     }
 
-    return NextResponse.json(customer)
+    return NextResponse.json({ customer })
   } catch (error) {
     console.error("Error in customer lookup:", error)
     return NextResponse.json({ error: "Internal server error" }, { status: 500 })
@@ -28,54 +32,34 @@ export async function GET(request: NextRequest) {
 
 export async function POST(request: NextRequest) {
   try {
-    const authHeader = request.headers.get("authorization")
-    if (!authHeader || !authHeader.startsWith("Bearer ")) {
-      return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
-    }
-
-    const token = authHeader.split(" ")[1]
-    const supabase = createServerClient()
-
-    // Verify the token and get user
-    const {
-      data: { user },
-      error: authError,
-    } = await supabase.auth.getUser(token)
-
-    if (authError || !user) {
-      return NextResponse.json({ error: "Invalid token" }, { status: 401 })
-    }
-
     const customerData = await request.json()
 
+    if (!customerData.email) {
+      return NextResponse.json({ error: "Email is required" }, { status: 400 })
+    }
+
+    const supabase = createServerClient()
+
     // Check if customer already exists
-    const { data: existingCustomer } = await supabase.from("customers").select("*").eq("email", user.email).single()
-
-    if (existingCustomer) {
-      return NextResponse.json(existingCustomer)
-    }
-
-    // Create new customer record
-    const newCustomerData = {
-      email: user.email,
-      name: customerData.name || user.user_metadata?.full_name || user.user_metadata?.name || "Unknown",
-      phone: customerData.phone || "",
-      address: customerData.address || "",
-      created_at: new Date().toISOString(),
-    }
-
-    const { data: newCustomer, error: createError } = await supabase
+    const { data: existingCustomer } = await supabase
       .from("customers")
-      .insert([newCustomerData])
-      .select()
+      .select("*")
+      .eq("email", customerData.email)
       .single()
 
-    if (createError) {
-      console.error("Error creating customer:", createError)
-      return NextResponse.json({ error: "Failed to create customer record" }, { status: 500 })
+    if (existingCustomer) {
+      return NextResponse.json({ customer: existingCustomer })
     }
 
-    return NextResponse.json(newCustomer)
+    // Create new customer
+    const { data: newCustomer, error } = await supabase.from("customers").insert([customerData]).select().single()
+
+    if (error) {
+      console.error("Error creating customer:", error)
+      return NextResponse.json({ error: "Failed to create customer" }, { status: 500 })
+    }
+
+    return NextResponse.json({ customer: newCustomer })
   } catch (error) {
     console.error("Error in customer creation:", error)
     return NextResponse.json({ error: "Internal server error" }, { status: 500 })
