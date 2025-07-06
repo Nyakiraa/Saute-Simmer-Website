@@ -45,7 +45,6 @@ export async function POST(request: NextRequest) {
       zip_code: "N/A",
       country: "Philippines",
       created_at: new Date().toISOString(),
-      updated_at: new Date().toISOString(),
     }
 
     const { data: location, error: locationError } = await supabase
@@ -69,7 +68,6 @@ export async function POST(request: NextRequest) {
       delivery_address: orderData.deliveryAddress,
       special_instructions: orderData.specialRequests || "Custom meal selection",
       created_at: new Date().toISOString(),
-      updated_at: new Date().toISOString(),
     }
 
     const { data: mainOrder, error: orderError } = await supabase
@@ -92,7 +90,6 @@ export async function POST(request: NextRequest) {
       transaction_id: `TXN-${mainOrder.id}-${Date.now()}`,
       payment_date: null, // Will be set when payment is completed
       created_at: new Date().toISOString(),
-      updated_at: new Date().toISOString(),
     }
 
     const { data: payment, error: paymentError } = await supabase
@@ -119,7 +116,6 @@ export async function POST(request: NextRequest) {
       order_id: mainOrder.id, // Link to main order
       location_id: location.id, // Link to location
       created_at: new Date().toISOString(),
-      updated_at: new Date().toISOString(),
     }
 
     const { data: cateringService, error: cateringError } = await supabase
@@ -141,7 +137,6 @@ export async function POST(request: NextRequest) {
       .from("orders")
       .update({
         total_amount: estimatedAmount,
-        updated_at: new Date().toISOString(),
       })
       .eq("id", mainOrder.id)
 
@@ -154,7 +149,6 @@ export async function POST(request: NextRequest) {
       .from("payments")
       .update({
         amount: estimatedAmount,
-        updated_at: new Date().toISOString(),
       })
       .eq("id", payment.id)
 
