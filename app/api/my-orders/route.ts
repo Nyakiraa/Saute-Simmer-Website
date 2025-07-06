@@ -3,24 +3,22 @@ import { createServerClient } from "@/lib/supabase"
 
 export async function GET(request: NextRequest) {
   try {
-    const supabase = createServerClient()
-
-    // Get the authorization header
     const authHeader = request.headers.get("authorization")
     if (!authHeader || !authHeader.startsWith("Bearer ")) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
     }
 
-    const token = authHeader.split(" ")[1]
+    const supabase = createServerClient()
 
-    // Verify the session
+    // Get the current user from the session
     const {
       data: { user },
-      error: authError,
-    } = await supabase.auth.getUser(token)
+      error: userError,
+    } = await supabase.auth.getUser(authHeader.replace("Bearer ", ""))
 
-    if (authError || !user) {
-      return NextResponse.json({ error: "Invalid session" }, { status: 401 })
+    if (userError || !user) {
+      console.error("User authentication failed:", userError)
+      return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
     }
 
     console.log("Fetching orders for user:", user.email)
@@ -29,88 +27,80 @@ export async function GET(request: NextRequest) {
     const allowedAdmins = ["ecbathan@gbox.adnu.edu.ph", "rabad@gbox.adnu.edu.ph", "charnepomuceno@gbox.adnu.edu.ph"]
     const isAdmin = allowedAdmins.includes(user.email || "")
 
-    let orders = []
-
+    let ordersQuery
     if (isAdmin) {
-      // Admin: Get all orders
-      console.log("Admin user - fetching all orders")
-
-      // Try to get from catering_services table first
-      const { data: cateringServices, error: cateringError } = await supabase
-        .from("catering_services")
-        .select("*")
-        .order("created_at", { ascending: false })
-
-      if (cateringError) {
-        console.error("Error fetching catering services:", cateringError)
-      } else {
-        orders = cateringServices || []
-        console.log("Found catering services:", orders.length)
-      }
-
-      // Also try to get from orders table if it exists
-      const { data: regularOrders, error: ordersError } = await supabase
+      // Admin sees all orders
+      ordersQuery = supabase
         .from("orders")
-        .select("*")
+        .select(`
+          *,
+          customers (
+            name,
+            email
+          )
+        `)
         .order("created_at", { ascending: false })
-
-      if (!ordersError && regularOrders) {
-        orders = [...orders, ...regularOrders]
-        console.log("Added regular orders, total:", orders.length)
-      }
     } else {
-      // Regular user: Get their orders only
-      console.log("Regular user - fetching user orders")
-
-      // First, find the customer record
-      const { data: customer, error: customerError } = await supabase
-        .from("customers")
-        .select("id")
-        .eq("email", user.email)
-        .single()
-
-      if (customerError) {
-        console.log("No customer record found, checking for orders by email")
-
-        // Try to find orders directly by email in catering_services
-        const { data: servicesByEmail, error: servicesError } = await supabase
-          .from("catering_services")
-          .select("*")
-          .ilike("customer_name", `%${user.email}%`)
-          .order("created_at", { ascending: false })
-
-        if (!servicesError && servicesByEmail) {
-          orders = servicesByEmail
-        }
-      } else {
-        // Get orders for this customer
-        const { data: customerOrders, error: ordersError } = await supabase
-          .from("catering_services")
-          .select("*")
-          .eq("customer_id", customer.id)
-          .order("created_at", { ascending: false })
-
-        if (!ordersError && customerOrders) {
-          orders = customerOrders
-        }
-      }
+      // Regular users see only their orders
+      ordersQuery = supabase
+        .from("orders")
+        .select(`
+          *,
+          customers (
+            name,
+            email
+          )
+        `)
+        .eq("customer_email", user.email)
+        .order("created_at", { ascending: false })
     }
 
-    console.log("Final orders count:", orders.length)
+    const { data: orders, error: ordersError } = await ordersQuery
+
+    if (ordersError) {
+      console.error("Error fetching orders:", ordersError)
+      return NextResponse.json({ error: "Failed to fetch orders", details: ordersError }, { status: 500 })
+    }
+
+    console.log("Orders fetched successfully:", orders?.length || 0)
+
+    // Also fetch catering services for backward compatibility
+    let cateringQuery
+    if (isAdmin) {
+      cateringQuery = supabase.from("catering_services").select("*").order("created_at", { ascending: false })
+    } else {
+      cateringQuery = supabase
+        .from("catering_services")
+        .select("*")
+        .eq("customer_name", user.user_metadata?.full_name || user.email)
+        .order("created_at", { ascending: false })
+    }
+
+    const { data: cateringServices, error: cateringError } = await cateringQuery
+
+    if (cateringError) {
+      console.error("Error fetching catering services:", cateringError)
+    }
+
+    // Combine orders and catering services
+    const allOrders = [
+      ...(orders || []),
+      ...(cateringServices || []).map((service) => ({
+        ...service,
+        type: "catering_service",
+      })),
+    ]
 
     return NextResponse.json({
-      orders: orders,
-      isAdmin: isAdmin,
-      userEmail: user.email,
+      orders: allOrders,
+      isAdmin,
+      user: {
+        email: user.email,
+        name: user.user_metadata?.full_name || user.user_metadata?.name,
+      },
     })
   } catch (error) {
     console.error("Error in my-orders API:", error)
-    return NextResponse.json(
-      {
-        error: "Failed to fetch orders",
-        details: error instanceof Error ? error.message : "Unknown error",
-      },
-      { status: 500 },
-    )
+    return NextResponse.json({ error: "Internal server error", details: error }, { status: 500 })
   }
 }
