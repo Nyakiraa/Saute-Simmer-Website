@@ -1,4 +1,5 @@
 "use client"
+
 import { useState, useEffect } from "react"
 import { useSearchParams } from "next/navigation"
 import Header from "../../components/Header"
@@ -8,9 +9,10 @@ import { supabase } from "@/lib/supabase-auth"
 interface Order {
   id: number
   customer_id: number
-  order_date: string
+  customer_name: string
   total_amount: number
   status: string
+  order_date: string
   delivery_date?: string
   delivery_address?: string
   special_instructions?: string
@@ -352,6 +354,11 @@ export default function OrdersPage() {
                     <p style={{ margin: "0", color: "#666", fontSize: "0.95rem" }}>
                       Placed on {formatDateTime(order.created_at)}
                     </p>
+                    {isAdmin && (
+                      <p style={{ margin: "5px 0 0 0", color: "#666", fontSize: "0.9rem" }}>
+                        Customer: {order.customer_name}
+                      </p>
+                    )}
                   </div>
                   <div style={{ display: "flex", gap: "10px", alignItems: "center", flexWrap: "wrap" }}>
                     <span
@@ -461,7 +468,7 @@ export default function OrdersPage() {
                   )}
                 </div>
 
-                {/* Special Requests */}
+                {/* Special Instructions */}
                 {(order.special_instructions || order.catering_service?.special_requests) && (
                   <div
                     style={{
@@ -496,6 +503,32 @@ export default function OrdersPage() {
                   </div>
                   <div style={{ fontSize: "0.9rem", color: "#666" }}>Order ID: {order.id}</div>
                 </div>
+
+                {/* Admin Actions */}
+                {isAdmin && (
+                  <div style={{ marginTop: "20px", paddingTop: "20px", borderTop: "1px solid #eee" }}>
+                    <div style={{ display: "flex", gap: "10px", flexWrap: "wrap" }}>
+                      <button
+                        className="btn btn-primary"
+                        style={{ padding: "8px 16px", fontSize: "0.9rem" }}
+                        onClick={() => {
+                          console.log("Update order status for order:", order.id)
+                        }}
+                      >
+                        Update Status
+                      </button>
+                      <button
+                        className="btn btn-secondary"
+                        style={{ padding: "8px 16px", fontSize: "0.9rem" }}
+                        onClick={() => {
+                          console.log("View order details for order:", order.id)
+                        }}
+                      >
+                        View Details
+                      </button>
+                    </div>
+                  </div>
+                )}
               </div>
             ))}
           </div>
