@@ -4,7 +4,11 @@ import { createServerClient } from "@/lib/supabase"
 export async function GET() {
   try {
     const supabase = createServerClient()
-    const { data: mealSets, error } = await supabase.from("meal_sets").select("*").order("price", { ascending: true })
+    const { data: mealSets, error } = await supabase
+      .from("meal_sets")
+      .select("*")
+      .order("type", { ascending: true })
+      .order("price", { ascending: true })
 
     if (error) {
       console.error("Error fetching meal sets:", error)
