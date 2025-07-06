@@ -1,5 +1,4 @@
 "use client"
-
 import { useState, useEffect } from "react"
 import { useSearchParams } from "next/navigation"
 import Header from "../../components/Header"
@@ -9,22 +8,35 @@ import { supabase } from "@/lib/supabase-auth"
 interface Order {
   id: number
   customer_id: number
-  customer_name: string
-  event_type: string
-  event_date: string
-  guest_count: number
+  order_date: string
+  total_amount: number
   status: string
-  location: string
-  special_requests?: string
-  created_at: string
-}
-
-interface Customer {
-  id: number
-  name: string
-  email: string
-  phone: string
-  address: string
+  delivery_date: string
+  delivery_address: string
+  special_instructions: string
+  catering_service?: {
+    id: number
+    event_type: string
+    guest_count: number
+    location: string
+    special_requests: string
+  }
+  location?: {
+    id: number
+    name: string
+    address: string
+    city: string
+    state: string
+    country: string
+  }
+  payment?: {
+    id: number
+    amount: number
+    payment_method: string
+    payment_status: string
+    transaction_id: string
+    payment_date: string | null
+  }
 }
 
 export default function OrdersPage() {
@@ -50,6 +62,7 @@ export default function OrdersPage() {
       // Clear success message after 5 seconds
       setTimeout(() => {
         setShowSuccess(false)
+        setSuccessOrderId(null)
         // Remove success params from URL
         const url = new URL(window.location.href)
         url.searchParams.delete("success")
@@ -72,7 +85,13 @@ export default function OrdersPage() {
       }
 
       setUser(session.user)
-      await loadOrders(session.access_token)
+
+      // Check if user is admin
+      const adminEmails = ["admin@sauteandSimmer.com", "admin@example.com"]
+      const userIsAdmin = adminEmails.includes(session.user.email || "")
+      setIsAdmin(userIsAdmin)
+
+      await loadOrders(session.access_token, userIsAdmin)
     } catch (error) {
       console.error("Auth check failed:", error)
       window.location.href = "/login"
@@ -81,7 +100,7 @@ export default function OrdersPage() {
     }
   }
 
-  const loadOrders = async (token: string) => {
+  const loadOrders = async (token: string, userIsAdmin: boolean) => {
     try {
       const response = await fetch("/api/my-orders", {
         headers: {
@@ -103,34 +122,34 @@ export default function OrdersPage() {
   const getStatusColor = (status: string) => {
     switch (status.toLowerCase()) {
       case "pending":
-        return "#f39c12"
+        return "#ff9800"
       case "confirmed":
-        return "#3498db"
+        return "#2196f3"
       case "preparing":
-        return "#9b59b6"
+        return "#9c27b0"
+      case "ready":
+        return "#4caf50"
       case "delivered":
-        return "#27ae60"
+        return "#8bc34a"
       case "cancelled":
-        return "#e74c3c"
+        return "#f44336"
       default:
-        return "#95a5a6"
+        return "#757575"
     }
   }
 
-  const getStatusIcon = (status: string) => {
+  const getPaymentStatusColor = (status: string) => {
     switch (status.toLowerCase()) {
       case "pending":
-        return "fas fa-clock"
-      case "confirmed":
-        return "fas fa-check-circle"
-      case "preparing":
-        return "fas fa-utensils"
-      case "delivered":
-        return "fas fa-truck"
-      case "cancelled":
-        return "fas fa-times-circle"
+        return "#ff9800"
+      case "paid":
+        return "#4caf50"
+      case "failed":
+        return "#f44336"
+      case "refunded":
+        return "#9c27b0"
       default:
-        return "fas fa-question-circle"
+        return "#757575"
     }
   }
 
@@ -167,216 +186,262 @@ export default function OrdersPage() {
   return (
     <>
       <Header />
-
-      {/* Success Message */}
-      {showSuccess && (
-        <div
-          style={{
-            backgroundColor: "#d4edda",
-            color: "#155724",
-            padding: "15px 20px",
-            margin: "20px 5%",
-            borderRadius: "8px",
-            border: "1px solid #c3e6cb",
-            display: "flex",
-            alignItems: "center",
-            gap: "10px",
-          }}
-        >
-          <i className="fas fa-check-circle" style={{ fontSize: "1.2rem" }}></i>
-          <div>
-            <strong>Order Placed Successfully!</strong>
-            <br />
-            Your order #{successOrderId} has been submitted and is being processed.
-          </div>
-        </div>
-      )}
-
-      {/* Page Header */}
-      <section
-        style={{
-          background: "linear-gradient(rgba(0, 0, 0, 0.7), rgba(0, 0, 0, 0.7)), url(/images/orders-bg.jpg)",
-          backgroundSize: "cover",
-          backgroundPosition: "center",
-          color: "var(--light-text)",
-          padding: "80px 5%",
-          textAlign: "center",
-        }}
-      >
-        <div style={{ maxWidth: "800px", margin: "0 auto" }}>
-          <h1 style={{ fontSize: "3rem", marginBottom: "20px" }}>My Orders</h1>
-          <p style={{ fontSize: "1.2rem", marginBottom: "0", opacity: "0.9" }}>
-            Track your catering orders and view order history.
+      <section style={{ maxWidth: "1200px", margin: "40px auto", padding: "0 5%" }}>
+        <div style={{ marginBottom: "30px" }}>
+          <h1
+            style={{
+              fontSize: "2.5rem",
+              color: "var(--primary-color)",
+              marginBottom: "10px",
+              fontFamily: "Poppins, sans-serif",
+            }}
+          >
+            {isAdmin ? "All Orders" : "My Orders"}
+          </h1>
+          <p style={{ color: "#666", fontSize: "1.1rem" }}>
+            {isAdmin ? "Manage all customer orders" : "Track your catering orders"}
           </p>
         </div>
-      </section>
 
-      {/* Orders List */}
-      <section style={{ padding: "60px 5%" }}>
-        <div style={{ maxWidth: "1200px", margin: "0 auto" }}>
-          {orders.length === 0 ? (
-            <div style={{ textAlign: "center", padding: "60px 20px" }}>
-              <i className="fas fa-shopping-cart" style={{ fontSize: "4rem", color: "#ddd", marginBottom: "20px" }}></i>
-              <h2 style={{ fontSize: "2rem", marginBottom: "15px", color: "#666" }}>No Orders Yet</h2>
-              <p style={{ fontSize: "1.1rem", color: "#888", marginBottom: "30px" }}>
-                You haven't placed any orders yet. Start by exploring our meal sets or creating custom meals.
-              </p>
-              <div style={{ display: "flex", gap: "15px", justifyContent: "center", flexWrap: "wrap" }}>
-                <button
-                  onClick={() => (window.location.href = "/meals")}
-                  className="btn btn-primary"
-                  style={{ padding: "12px 25px" }}
-                >
-                  Browse Meal Sets
-                </button>
-                <button
-                  onClick={() => (window.location.href = "/custom-meals")}
-                  className="btn btn-secondary"
-                  style={{ padding: "12px 25px" }}
-                >
-                  Create Custom Meal
-                </button>
-              </div>
+        {/* Success Message */}
+        {showSuccess && (
+          <div
+            style={{
+              backgroundColor: "#d4edda",
+              border: "1px solid #c3e6cb",
+              borderRadius: "10px",
+              padding: "20px",
+              marginBottom: "30px",
+              color: "#155724",
+              display: "flex",
+              alignItems: "center",
+              gap: "15px",
+            }}
+          >
+            <div
+              style={{
+                width: "24px",
+                height: "24px",
+                backgroundColor: "#28a745",
+                borderRadius: "50%",
+                display: "flex",
+                alignItems: "center",
+                justifyContent: "center",
+                color: "white",
+                fontSize: "14px",
+                fontWeight: "bold",
+              }}
+            >
+              ✓
             </div>
-          ) : (
-            <div style={{ display: "grid", gap: "25px" }}>
-              {orders.map((order) => (
-                <div
-                  key={order.id}
-                  style={{
-                    backgroundColor: "var(--light-text)",
-                    borderRadius: "15px",
-                    padding: "25px",
-                    boxShadow: "0 5px 15px var(--shadow-color)",
-                    border: "1px solid #f0f0f0",
-                  }}
-                >
-                  <div
-                    style={{
-                      display: "grid",
-                      gridTemplateColumns: "1fr auto",
-                      gap: "20px",
-                      alignItems: "start",
-                    }}
-                  >
-                    {/* Order Details */}
-                    <div>
-                      <div style={{ display: "flex", alignItems: "center", marginBottom: "15px" }}>
-                        <h3
-                          style={{
-                            fontSize: "1.3rem",
-                            color: "var(--primary-color)",
-                            margin: "0 15px 0 0",
-                          }}
-                        >
-                          Order #{order.id}
-                        </h3>
-                        <div
-                          style={{
-                            display: "flex",
-                            alignItems: "center",
-                            gap: "8px",
-                            backgroundColor: getStatusColor(order.status),
-                            color: "white",
-                            padding: "6px 12px",
-                            borderRadius: "20px",
-                            fontSize: "0.9rem",
-                            fontWeight: "500",
-                          }}
-                        >
-                          <i className={getStatusIcon(order.status)}></i>
-                          <span style={{ textTransform: "capitalize" }}>{order.status}</span>
-                        </div>
-                      </div>
+            <div>
+              <h3 style={{ margin: "0 0 5px 0", fontSize: "1.2rem" }}>Order Placed Successfully!</h3>
+              <p style={{ margin: 0, fontSize: "1rem" }}>
+                Your order #{successOrderId} has been received and is being processed. You will receive a confirmation
+                email shortly.
+              </p>
+            </div>
+          </div>
+        )}
 
-                      <div
-                        style={{
-                          display: "grid",
-                          gridTemplateColumns: "repeat(auto-fit, minmax(200px, 1fr))",
-                          gap: "15px",
-                          marginBottom: "15px",
-                        }}
-                      >
-                        <div>
-                          <div style={{ fontWeight: "500", color: "#666", fontSize: "0.9rem" }}>Event Type</div>
-                          <div style={{ fontSize: "1rem", marginTop: "2px" }}>{order.event_type}</div>
-                        </div>
-                        <div>
-                          <div style={{ fontWeight: "500", color: "#666", fontSize: "0.9rem" }}>Event Date</div>
-                          <div style={{ fontSize: "1rem", marginTop: "2px" }}>{formatDate(order.event_date)}</div>
-                        </div>
-                        <div>
-                          <div style={{ fontWeight: "500", color: "#666", fontSize: "0.9rem" }}>Guest Count</div>
-                          <div style={{ fontSize: "1rem", marginTop: "2px" }}>{order.guest_count} persons</div>
-                        </div>
-                        <div>
-                          <div style={{ fontWeight: "500", color: "#666", fontSize: "0.9rem" }}>Order Date</div>
-                          <div style={{ fontSize: "1rem", marginTop: "2px" }}>{formatDateTime(order.created_at)}</div>
-                        </div>
-                      </div>
-
-                      <div style={{ marginBottom: "15px" }}>
-                        <div style={{ fontWeight: "500", color: "#666", fontSize: "0.9rem", marginBottom: "5px" }}>
-                          Delivery Location
-                        </div>
-                        <div style={{ fontSize: "1rem" }}>{order.location}</div>
-                      </div>
-
-                      {order.special_requests && (
-                        <div>
-                          <div style={{ fontWeight: "500", color: "#666", fontSize: "0.9rem", marginBottom: "5px" }}>
-                            Special Requests
-                          </div>
-                          <div
-                            style={{
-                              fontSize: "0.95rem",
-                              backgroundColor: "#f8f9fa",
-                              padding: "10px",
-                              borderRadius: "8px",
-                              whiteSpace: "pre-line",
-                            }}
-                          >
-                            {order.special_requests}
-                          </div>
-                        </div>
-                      )}
+        {orders.length === 0 ? (
+          <div
+            style={{
+              textAlign: "center",
+              padding: "60px 20px",
+              backgroundColor: "var(--light-text)",
+              borderRadius: "15px",
+              boxShadow: "0 5px 15px var(--shadow-color)",
+            }}
+          >
+            <div style={{ fontSize: "3rem", marginBottom: "20px", opacity: 0.3 }}>📋</div>
+            <h2 style={{ fontSize: "1.8rem", color: "var(--primary-color)", marginBottom: "15px" }}>
+              {isAdmin ? "No orders found" : "No orders yet"}
+            </h2>
+            <p style={{ color: "#666", fontSize: "1.1rem", marginBottom: "30px" }}>
+              {isAdmin
+                ? "No customer orders have been placed yet."
+                : "You haven't placed any orders yet. Start by exploring our meal sets!"}
+            </p>
+            {!isAdmin && (
+              <button
+                onClick={() => (window.location.href = "/meals")}
+                className="btn btn-primary"
+                style={{ padding: "12px 30px", fontSize: "1.1rem" }}
+              >
+                Browse Meal Sets
+              </button>
+            )}
+          </div>
+        ) : (
+          <div style={{ display: "grid", gap: "25px" }}>
+            {orders.map((order) => (
+              <div
+                key={order.id}
+                style={{
+                  backgroundColor: "var(--light-text)",
+                  borderRadius: "15px",
+                  padding: "25px",
+                  boxShadow: "0 5px 15px var(--shadow-color)",
+                  border: "1px solid #eee",
+                }}
+              >
+                <div style={{ display: "grid", gridTemplateColumns: "1fr auto", gap: "20px", marginBottom: "20px" }}>
+                  <div>
+                    <h3
+                      style={{
+                        fontSize: "1.3rem",
+                        color: "var(--primary-color)",
+                        marginBottom: "8px",
+                        fontWeight: "600",
+                      }}
+                    >
+                      Order #{order.id}
+                    </h3>
+                    <p style={{ color: "#666", fontSize: "0.95rem", margin: "0" }}>
+                      Placed on {formatDateTime(order.order_date)}
+                    </p>
+                  </div>
+                  <div style={{ textAlign: "right" }}>
+                    <div
+                      style={{
+                        display: "inline-block",
+                        padding: "6px 12px",
+                        borderRadius: "20px",
+                        fontSize: "0.85rem",
+                        fontWeight: "600",
+                        color: "white",
+                        backgroundColor: getStatusColor(order.status),
+                        marginBottom: "8px",
+                      }}
+                    >
+                      {order.status.charAt(0).toUpperCase() + order.status.slice(1)}
                     </div>
+                    <div style={{ fontSize: "1.2rem", fontWeight: "600", color: "var(--primary-color)" }}>
+                      ₱{order.total_amount.toFixed(2)}
+                    </div>
+                  </div>
+                </div>
 
-                    {/* Order Actions */}
-                    <div style={{ textAlign: "right" }}>
-                      {order.status === "pending" && (
-                        <div style={{ fontSize: "0.9rem", color: "#666", marginBottom: "10px" }}>
-                          <i className="fas fa-info-circle" style={{ marginRight: "5px" }}></i>
-                          Awaiting confirmation
+                <div
+                  style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(250px, 1fr))", gap: "20px" }}
+                >
+                  {/* Event Details */}
+                  {order.catering_service && (
+                    <div>
+                      <h4 style={{ fontSize: "1rem", color: "var(--primary-color)", marginBottom: "8px" }}>
+                        Event Details
+                      </h4>
+                      <div style={{ fontSize: "0.9rem", color: "#666", lineHeight: "1.6" }}>
+                        <div>
+                          <strong>Type:</strong> {order.catering_service.event_type}
                         </div>
-                      )}
-                      {order.status === "confirmed" && (
-                        <div style={{ fontSize: "0.9rem", color: "#3498db", marginBottom: "10px" }}>
-                          <i className="fas fa-check" style={{ marginRight: "5px" }}></i>
-                          Order confirmed
+                        <div>
+                          <strong>Date:</strong> {formatDate(order.delivery_date)}
                         </div>
-                      )}
-                      {order.status === "preparing" && (
-                        <div style={{ fontSize: "0.9rem", color: "#9b59b6", marginBottom: "10px" }}>
-                          <i className="fas fa-utensils" style={{ marginRight: "5px" }}></i>
-                          Being prepared
+                        <div>
+                          <strong>Guests:</strong> {order.catering_service.guest_count} persons
                         </div>
-                      )}
-                      {order.status === "delivered" && (
-                        <div style={{ fontSize: "0.9rem", color: "#27ae60", marginBottom: "10px" }}>
-                          <i className="fas fa-check-double" style={{ marginRight: "5px" }}></i>
-                          Delivered successfully
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Delivery Details */}
+                  <div>
+                    <h4 style={{ fontSize: "1rem", color: "var(--primary-color)", marginBottom: "8px" }}>
+                      Delivery Details
+                    </h4>
+                    <div style={{ fontSize: "0.9rem", color: "#666", lineHeight: "1.6" }}>
+                      <div>
+                        <strong>Address:</strong> {order.delivery_address}
+                      </div>
+                      {order.location && (
+                        <div>
+                          <strong>Location:</strong> {order.location.name}
                         </div>
                       )}
                     </div>
                   </div>
-                </div>
-              ))}
-            </div>
-          )}
-        </div>
-      </section>
 
+                  {/* Payment Details */}
+                  {order.payment && (
+                    <div>
+                      <h4 style={{ fontSize: "1rem", color: "var(--primary-color)", marginBottom: "8px" }}>
+                        Payment Details
+                      </h4>
+                      <div style={{ fontSize: "0.9rem", color: "#666", lineHeight: "1.6" }}>
+                        <div>
+                          <strong>Status:</strong>{" "}
+                          <span
+                            style={{
+                              color: getPaymentStatusColor(order.payment.payment_status),
+                              fontWeight: "600",
+                            }}
+                          >
+                            {order.payment.payment_status.charAt(0).toUpperCase() +
+                              order.payment.payment_status.slice(1)}
+                          </span>
+                        </div>
+                        <div>
+                          <strong>Method:</strong> {order.payment.payment_method}
+                        </div>
+                        <div>
+                          <strong>Transaction ID:</strong> {order.payment.transaction_id}
+                        </div>
+                        {order.payment.payment_date && (
+                          <div>
+                            <strong>Paid on:</strong> {formatDateTime(order.payment.payment_date)}
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                  )}
+                </div>
+
+                {/* Special Instructions */}
+                {order.special_instructions && (
+                  <div style={{ marginTop: "20px", paddingTop: "20px", borderTop: "1px solid #eee" }}>
+                    <h4 style={{ fontSize: "1rem", color: "var(--primary-color)", marginBottom: "8px" }}>
+                      Special Instructions
+                    </h4>
+                    <p style={{ fontSize: "0.9rem", color: "#666", lineHeight: "1.6", margin: "0" }}>
+                      {order.special_instructions}
+                    </p>
+                  </div>
+                )}
+
+                {/* Admin Actions */}
+                {isAdmin && (
+                  <div style={{ marginTop: "20px", paddingTop: "20px", borderTop: "1px solid #eee" }}>
+                    <div style={{ display: "flex", gap: "10px", flexWrap: "wrap" }}>
+                      <button
+                        className="btn btn-primary"
+                        style={{ padding: "8px 16px", fontSize: "0.9rem" }}
+                        onClick={() => {
+                          // Update order status logic here
+                          console.log("Update order status for order:", order.id)
+                        }}
+                      >
+                        Update Status
+                      </button>
+                      <button
+                        className="btn btn-secondary"
+                        style={{ padding: "8px 16px", fontSize: "0.9rem" }}
+                        onClick={() => {
+                          // View full order details logic here
+                          console.log("View order details for order:", order.id)
+                        }}
+                      >
+                        View Details
+                      </button>
+                    </div>
+                  </div>
+                )}
+              </div>
+            ))}
+          </div>
+        )}
+      </section>
       <Footer />
     </>
   )
