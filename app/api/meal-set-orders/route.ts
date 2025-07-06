@@ -6,8 +6,6 @@ export async function POST(request: NextRequest) {
     console.log("=== Meal Set Order API Called ===")
 
     const authHeader = request.headers.get("authorization")
-    console.log("Auth header present:", !!authHeader)
-
     if (!authHeader || !authHeader.startsWith("Bearer ")) {
       console.log("Missing or invalid authorization header")
       return NextResponse.json({ error: "Unauthorized - Missing token" }, { status: 401 })
@@ -101,6 +99,8 @@ export async function POST(request: NextRequest) {
       name: `Event Location - ${orderData.eventType}`,
       address: orderData.deliveryAddress,
       city: "N/A",
+      phone: null,
+      status: "active",
       state: "N/A",
       zip_code: "N/A",
       country: "Philippines",
@@ -130,9 +130,11 @@ export async function POST(request: NextRequest) {
     console.log("Creating main order record...")
     const mainOrderData = {
       customer_id: customer.id,
-      order_date: new Date().toISOString(),
+      customer_name: customer.name,
+      items: [{ meal_set_id: mealSet.id, name: mealSet.name, quantity: orderData.quantity || 1 }],
       total_amount: totalAmount,
       status: "pending",
+      order_date: new Date().toISOString().split("T")[0], // Date only
       delivery_date: orderData.eventDate,
       delivery_address: orderData.deliveryAddress,
       special_instructions: orderData.specialRequests || `Meal Set: ${mealSet.name}`,
@@ -163,6 +165,8 @@ export async function POST(request: NextRequest) {
     // 3. Create payment record
     console.log("Creating payment record...")
     const paymentData = {
+      customer_id: customer.id,
+      customer_name: customer.name,
       order_id: mainOrder.id,
       amount: totalAmount,
       payment_method: "pending",
