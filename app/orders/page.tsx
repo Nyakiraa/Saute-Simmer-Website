@@ -1,8 +1,8 @@
 "use client"
 import { useState, useEffect } from "react"
 import { useSearchParams } from "next/navigation"
-import Header from "../components/Header"
-import Footer from "../components/Footer"
+import Header from "../../components/Header"
+import Footer from "../../components/Footer"
 import { supabase } from "@/lib/supabase-auth"
 
 interface Order {
