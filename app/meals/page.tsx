@@ -4,6 +4,7 @@ import { useState, useEffect } from "react"
 import Header from "../../components/Header"
 import Footer from "../../components/Footer"
 import Link from "next/link"
+import { supabase } from "@/lib/supabase-auth"
 
 interface MealSet {
   id: number
@@ -62,8 +63,27 @@ export default function MealsPage() {
     setSelectedMeal(null)
   }
 
-  const handleSelectSet = (mealId: number) => {
-    window.location.href = `/orders?set=${mealId}&quantity=${quantity}`
+  const handleSelectSet = async (mealId: number) => {
+    // Check if user is logged in
+    try {
+      const {
+        data: { session },
+        error,
+      } = await supabase.auth.getSession()
+
+      if (error || !session) {
+        alert("Please login first to place an order.")
+        window.location.href = "/login?redirect=/meals"
+        return
+      }
+
+      // Redirect to order details page instead of orders page
+      window.location.href = `/order-details?set=${mealId}&quantity=${quantity}`
+    } catch (error) {
+      console.error("Auth check failed:", error)
+      alert("Please login first to place an order.")
+      window.location.href = "/login"
+    }
   }
 
   if (isLoading) {
@@ -94,8 +114,7 @@ export default function MealsPage() {
         }}
       >
         <div style={{ maxWidth: "800px", margin: "0 auto" }}>
-          <h1 style={{ fontSize: "3rem", marginBottom: "20px",fontFamily: "'Cinzel Decorative', serif",
-                    fontWeight: "700", }}>Our Meal Sets</h1>
+          <h1 style={{ fontSize: "3rem", marginBottom: "20px" }}>Our Meal Sets</h1>
           <p style={{ fontSize: "1.2rem", marginBottom: "0", opacity: "0.9" }}>
             Choose from our carefully curated meal sets for your next event.
           </p>
@@ -141,7 +160,7 @@ export default function MealsPage() {
               gap: "30px",
             }}
           >
-            {filteredMeals.map((meal) => (
+            {filteredMeals.slice(0, 3).map((meal) => (
               <div
                 key={meal.id}
                 style={{
