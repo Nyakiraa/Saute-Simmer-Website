@@ -16,7 +16,7 @@ export async function GET(request: NextRequest) {
 
     if (error) {
       if (error.code === "PGRST116") {
-        // No rows returned
+        // No customer found
         return NextResponse.json({ customer: null })
       }
       console.error("Error fetching customer:", error)
@@ -34,8 +34,8 @@ export async function POST(request: NextRequest) {
   try {
     const customerData = await request.json()
 
-    if (!customerData.email) {
-      return NextResponse.json({ error: "Email is required" }, { status: 400 })
+    if (!customerData.email || !customerData.name) {
+      return NextResponse.json({ error: "Email and name are required" }, { status: 400 })
     }
 
     const supabase = createServerClient()
@@ -52,7 +52,19 @@ export async function POST(request: NextRequest) {
     }
 
     // Create new customer
-    const { data: newCustomer, error } = await supabase.from("customers").insert([customerData]).select().single()
+    const { data: newCustomer, error } = await supabase
+      .from("customers")
+      .insert([
+        {
+          name: customerData.name,
+          email: customerData.email,
+          phone: customerData.phone || null,
+          address: customerData.address || null,
+          created_at: new Date().toISOString(),
+        },
+      ])
+      .select()
+      .single()
 
     if (error) {
       console.error("Error creating customer:", error)
