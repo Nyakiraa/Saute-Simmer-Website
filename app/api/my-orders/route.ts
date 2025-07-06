@@ -1,59 +1,74 @@
 import { type NextRequest, NextResponse } from "next/server"
 import { createServerClient } from "@/lib/supabase"
-import { createClient } from "@supabase/supabase-js"
-import { SUPABASE_CONFIG } from "@/lib/config"
 
 export async function GET(request: NextRequest) {
   try {
-    // Get the authorization header
     const authHeader = request.headers.get("authorization")
-    if (!authHeader) {
+    if (!authHeader || !authHeader.startsWith("Bearer ")) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
     }
 
-    // Create a client with the user's session
-    const supabaseAuth = createClient(SUPABASE_CONFIG.url, SUPABASE_CONFIG.anonKey)
-    const token = authHeader.replace("Bearer ", "")
+    const token = authHeader.split(" ")[1]
+    const supabase = createServerClient()
 
+    // Verify the token and get user
     const {
       data: { user },
       error: authError,
-    } = await supabaseAuth.auth.getUser(token)
+    } = await supabase.auth.getUser(token)
 
     if (authError || !user) {
-      return NextResponse.json({ error: "Invalid session" }, { status: 401 })
+      return NextResponse.json({ error: "Invalid token" }, { status: 401 })
     }
 
     // Check if user is admin
-    const allowedAdmins = ["ecbathan@gbox.adnu.edu.ph", "rabad@gbox.adnu.edu.ph", "charnepomuceno@gbox.adnu.edu.ph"]
-    const isAdmin = allowedAdmins.includes(user.email || "")
+    const adminEmails = ["ecbathan@gbox.adnu.edu.ph", "rabad@gbox.adnu.edu.ph", "charnepomuceno@gbox.adnu.edu.ph"]
+    const isAdmin = adminEmails.includes(user.email || "")
 
-    const supabase = createServerClient()
-    let query = supabase.from("catering_services").select("*").order("created_at", { ascending: false })
+    let orders
 
-    // If not admin, filter by user's orders
-    if (!isAdmin) {
-      // Filter by customer email or name that matches the user
-      query = query.or(`customer_name.eq.${user.user_metadata?.full_name || user.email},customer_name.eq.${user.email}`)
+    if (isAdmin) {
+      // Admin can see all orders
+      const { data, error } = await supabase
+        .from("catering_services")
+        .select("*")
+        .order("created_at", { ascending: false })
+
+      if (error) {
+        console.error("Error fetching all orders:", error)
+        return NextResponse.json({ error: "Failed to fetch orders" }, { status: 500 })
+      }
+
+      orders = data
+    } else {
+      // Regular users see only their orders
+      const { data: customer, error: customerError } = await supabase
+        .from("customers")
+        .select("id")
+        .eq("email", user.email)
+        .single()
+
+      if (customerError || !customer) {
+        return NextResponse.json({ orders: [] })
+      }
+
+      const { data, error } = await supabase
+        .from("catering_services")
+        .select("*")
+        .eq("customer_id", customer.id)
+        .order("created_at", { ascending: false })
+
+      if (error) {
+        console.error("Error fetching user orders:", error)
+        return NextResponse.json({ error: "Failed to fetch orders" }, { status: 500 })
+      }
+
+      orders = data
     }
 
-    const { data: cateringServices, error } = await query
-
-    if (error) {
-      console.error("Error fetching catering services:", error)
-      return NextResponse.json({ error: "Failed to fetch catering services" }, { status: 500 })
-    }
-
-    return NextResponse.json({
-      orders: cateringServices,
-      isAdmin,
-      user: {
-        email: user.email,
-        name: user.user_metadata?.full_name || user.email,
-      },
-    })
+    return NextResponse.json({ orders: orders || [] })
   } catch (error) {
-    console.error("Error:", error)
-    return NextResponse.json({ error: "Failed to fetch orders" }, { status: 500 })
+    console.error("Error in orders API:", error)
+    return NextResponse.json({ error: "Internal server error" }, { status: 500 })
   }
 }
