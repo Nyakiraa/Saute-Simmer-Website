@@ -21,6 +21,14 @@ interface CateringService {
   special_requests?: string
 }
 
+interface Customer {
+  id: number
+  name: string
+  email: string
+  phone: string
+  address: string
+}
+
 // Add after the existing interfaces
 const allowedAdmins = ["ecbathan@gbox.adnu.edu.ph", "rabad@gbox.adnu.edu.ph", "charnepomuceno@gbox.adnu.edu.ph"]
 
@@ -28,6 +36,7 @@ export default function OrdersPage() {
   const searchParams = useSearchParams()
   const [cateringServices, setCateringServices] = useState<CateringService[]>([])
   const [user, setUser] = useState<User | null>(null)
+  const [customer, setCustomer] = useState<Customer | null>(null)
   const [isAdmin, setIsAdmin] = useState(false)
   const [isCustomOrder, setIsCustomOrder] = useState(false)
   const [orderSuccess, setOrderSuccess] = useState(false)
@@ -82,34 +91,57 @@ export default function OrdersPage() {
         return
       }
 
-      setUser(session.user)
-      await loadUserOrders(session.access_token)
+      const currentUser = session.user
+      setUser(currentUser)
+
+      // Check if user is admin
+      const userIsAdmin = allowedAdmins.includes(currentUser.email || "")
+      setIsAdmin(userIsAdmin)
+
+      // Get customer record from our custom table
+      const customerResponse = await fetch("/api/customers/by-email", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ email: currentUser.email }),
+      })
+
+      let currentCustomer = null
+      if (customerResponse.ok) {
+        currentCustomer = await customerResponse.json()
+        setCustomer(currentCustomer)
+      }
+
+      // Load orders based on user role
+      await loadCateringServices(currentCustomer, userIsAdmin)
     } catch (error) {
       console.error("Auth check failed:", error)
       window.location.href = "/login?redirect=/orders"
     }
   }
 
-  const loadUserOrders = async (accessToken: string) => {
+  const loadCateringServices = async (currentCustomer: Customer | null, userIsAdmin: boolean) => {
     try {
-      const response = await fetch("/api/my-orders", {
-        headers: {
-          Authorization: `Bearer ${accessToken}`,
-        },
-      })
-
+      const response = await fetch("/api/catering-services")
       if (response.ok) {
         const data = await response.json()
-        setCateringServices(data.orders)
-        setIsAdmin(data.isAdmin)
-      } else if (response.status === 401) {
-        // Session expired, redirect to login
-        window.location.href = "/login?redirect=/orders"
-      } else {
-        throw new Error("Failed to load orders")
+
+        // Filter orders based on user role
+        let filteredServices = data
+        if (!userIsAdmin && currentCustomer) {
+          // Regular users only see their own orders
+          filteredServices = data.filter(
+            (service: CateringService) =>
+              service.customer_name === currentCustomer.name ||
+              service.customer_name === currentCustomer.email ||
+              service.customer_id === currentCustomer.id,
+          )
+        }
+        // Admins see all orders (no filtering needed)
+
+        setCateringServices(filteredServices)
       }
     } catch (error) {
-      console.error("Error loading orders:", error)
+      console.error("Error loading catering services:", error)
     } finally {
       setIsLoading(false)
     }
