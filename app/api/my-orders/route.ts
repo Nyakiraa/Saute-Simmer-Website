@@ -1,123 +1,113 @@
 import { type NextRequest, NextResponse } from "next/server"
-import { createClient } from "@supabase/supabase-js"
-
-const supabase = createClient(process.env.NEXT_PUBLIC_SUPABASE_URL!, process.env.SUPABASE_SERVICE_ROLE_KEY!)
+import { createServerClient } from "@/lib/supabase"
 
 export async function GET(request: NextRequest) {
   try {
+    const supabase = createServerClient()
+
+    // Get the authorization header
     const authHeader = request.headers.get("authorization")
     if (!authHeader || !authHeader.startsWith("Bearer ")) {
-      return NextResponse.json({ error: "Missing or invalid authorization header" }, { status: 401 })
+      return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
     }
 
     const token = authHeader.split(" ")[1]
 
-    // Verify the JWT token
+    // Verify the session
     const {
       data: { user },
       error: authError,
     } = await supabase.auth.getUser(token)
 
     if (authError || !user) {
-      console.error("Auth error:", authError)
-      return NextResponse.json({ error: "Invalid token" }, { status: 401 })
+      return NextResponse.json({ error: "Invalid session" }, { status: 401 })
     }
 
-    console.log("Authenticated user:", user.email)
+    console.log("Fetching orders for user:", user.email)
 
     // Check if user is admin
-    const adminEmails = ["ecbathan@gbox.adnu.edu.ph", "rabad@gbox.adnu.edu.ph", "charnepomuceno@gbox.adnu.edu.ph"]
-    const isAdmin = adminEmails.includes(user.email || "")
+    const allowedAdmins = ["ecbathan@gbox.adnu.edu.ph", "rabad@gbox.adnu.edu.ph", "charnepomuceno@gbox.adnu.edu.ph"]
+    const isAdmin = allowedAdmins.includes(user.email || "")
 
-    console.log("User is admin:", isAdmin)
-
-    let ordersQuery
+    let orders = []
 
     if (isAdmin) {
-      // Admin can see all orders
-      ordersQuery = supabase
-        .from("orders")
-        .select(`
-          *,
-          customers!inner(
-            id,
-            name,
-            email
-          )
-        `)
+      // Admin: Get all orders
+      console.log("Admin user - fetching all orders")
+
+      // Try to get from catering_services table first
+      const { data: cateringServices, error: cateringError } = await supabase
+        .from("catering_services")
+        .select("*")
         .order("created_at", { ascending: false })
+
+      if (cateringError) {
+        console.error("Error fetching catering services:", cateringError)
+      } else {
+        orders = cateringServices || []
+        console.log("Found catering services:", orders.length)
+      }
+
+      // Also try to get from orders table if it exists
+      const { data: regularOrders, error: ordersError } = await supabase
+        .from("orders")
+        .select("*")
+        .order("created_at", { ascending: false })
+
+      if (!ordersError && regularOrders) {
+        orders = [...orders, ...regularOrders]
+        console.log("Added regular orders, total:", orders.length)
+      }
     } else {
-      // Regular users can only see their own orders
-      // First, find the customer record for this user
+      // Regular user: Get their orders only
+      console.log("Regular user - fetching user orders")
+
+      // First, find the customer record
       const { data: customer, error: customerError } = await supabase
         .from("customers")
         .select("id")
         .eq("email", user.email)
         .single()
 
-      if (customerError || !customer) {
-        console.log("No customer record found for user:", user.email)
-        return NextResponse.json({
-          orders: [],
-          isAdmin: false,
-          message: "No customer record found",
-        })
+      if (customerError) {
+        console.log("No customer record found, checking for orders by email")
+
+        // Try to find orders directly by email in catering_services
+        const { data: servicesByEmail, error: servicesError } = await supabase
+          .from("catering_services")
+          .select("*")
+          .ilike("customer_name", `%${user.email}%`)
+          .order("created_at", { ascending: false })
+
+        if (!servicesError && servicesByEmail) {
+          orders = servicesByEmail
+        }
+      } else {
+        // Get orders for this customer
+        const { data: customerOrders, error: ordersError } = await supabase
+          .from("catering_services")
+          .select("*")
+          .eq("customer_id", customer.id)
+          .order("created_at", { ascending: false })
+
+        if (!ordersError && customerOrders) {
+          orders = customerOrders
+        }
       }
-
-      console.log("Found customer ID:", customer.id)
-
-      ordersQuery = supabase
-        .from("orders")
-        .select(`
-          *,
-          customers!inner(
-            id,
-            name,
-            email
-          )
-        `)
-        .eq("customer_id", customer.id)
-        .order("created_at", { ascending: false })
     }
 
-    const { data: orders, error: ordersError } = await ordersQuery
-
-    if (ordersError) {
-      console.error("Orders query error:", ordersError)
-      return NextResponse.json({ error: "Failed to fetch orders" }, { status: 500 })
-    }
-
-    console.log("Found orders:", orders?.length || 0)
-
-    // Transform the data to match the expected format
-    const transformedOrders =
-      orders?.map((order) => ({
-        id: order.id,
-        customer_id: order.customer_id,
-        customer_name: order.customers?.name || "Unknown Customer",
-        total_amount: order.total_amount || 0,
-        status: order.status || "pending",
-        order_date: order.order_date || order.created_at,
-        delivery_date: order.delivery_date,
-        delivery_address: order.delivery_address,
-        special_instructions: order.special_instructions,
-        created_at: order.created_at,
-        // Add placeholder data for missing relationships
-        catering_service: null,
-        location: null,
-        payment: null,
-      })) || []
+    console.log("Final orders count:", orders.length)
 
     return NextResponse.json({
-      orders: transformedOrders,
-      isAdmin,
-      total: transformedOrders.length,
+      orders: orders,
+      isAdmin: isAdmin,
+      userEmail: user.email,
     })
   } catch (error) {
-    console.error("API error:", error)
+    console.error("Error in my-orders API:", error)
     return NextResponse.json(
       {
-        error: "Internal server error",
+        error: "Failed to fetch orders",
         details: error instanceof Error ? error.message : "Unknown error",
       },
       { status: 500 },
