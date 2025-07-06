@@ -82,43 +82,34 @@ export default function OrdersPage() {
         return
       }
 
-      const currentUser = session.user
-      setUser(currentUser)
-
-      // Check if user is admin
-      const userIsAdmin = allowedAdmins.includes(currentUser.email || "")
-      setIsAdmin(userIsAdmin)
-
-      // Load orders based on user role
-      await loadCateringServices(currentUser, userIsAdmin)
+      setUser(session.user)
+      await loadUserOrders(session.access_token)
     } catch (error) {
       console.error("Auth check failed:", error)
       window.location.href = "/login?redirect=/orders"
     }
   }
 
-  const loadCateringServices = async (currentUser: User, userIsAdmin: boolean) => {
+  const loadUserOrders = async (accessToken: string) => {
     try {
-      const response = await fetch("/api/catering-services")
+      const response = await fetch("/api/my-orders", {
+        headers: {
+          Authorization: `Bearer ${accessToken}`,
+        },
+      })
+
       if (response.ok) {
         const data = await response.json()
-
-        // Filter orders based on user role
-        let filteredServices = data
-        if (!userIsAdmin) {
-          // Regular users only see their own orders
-          filteredServices = data.filter(
-            (service: CateringService) =>
-              service.customer_name === currentUser.user_metadata?.full_name ||
-              service.customer_name === currentUser.email,
-          )
-        }
-        // Admins see all orders (no filtering needed)
-
-        setCateringServices(filteredServices)
+        setCateringServices(data.orders)
+        setIsAdmin(data.isAdmin)
+      } else if (response.status === 401) {
+        // Session expired, redirect to login
+        window.location.href = "/login?redirect=/orders"
+      } else {
+        throw new Error("Failed to load orders")
       }
     } catch (error) {
-      console.error("Error loading catering services:", error)
+      console.error("Error loading orders:", error)
     } finally {
       setIsLoading(false)
     }
