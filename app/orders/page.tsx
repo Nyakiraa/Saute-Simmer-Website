@@ -1,4 +1,5 @@
 "use client"
+
 import { useState, useEffect } from "react"
 import { useSearchParams } from "next/navigation"
 import Header from "../../components/Header"
@@ -14,6 +15,7 @@ interface Order {
   delivery_date: string
   delivery_address: string
   special_instructions: string
+  created_at: string
   catering_service?: {
     id: number
     event_type: string
@@ -87,7 +89,7 @@ export default function OrdersPage() {
       setUser(session.user)
 
       // Check if user is admin
-      const adminEmails = ["admin@sauteandSimmer.com", "admin@example.com"]
+      const adminEmails = ["ecbathan@gbox.adnu.edu.ph", "rabad@gbox.adnu.edu.ph", "charnepomuceno@gbox.adnu.edu.ph"]
       const userIsAdmin = adminEmails.includes(session.user.email || "")
       setIsAdmin(userIsAdmin)
 
