@@ -21,14 +21,6 @@ interface CateringService {
   special_requests?: string
 }
 
-interface Customer {
-  id: number
-  name: string
-  email: string
-  phone: string
-  address: string
-}
-
 // Add after the existing interfaces
 const allowedAdmins = ["ecbathan@gbox.adnu.edu.ph", "rabad@gbox.adnu.edu.ph", "charnepomuceno@gbox.adnu.edu.ph"]
 
@@ -36,7 +28,6 @@ export default function OrdersPage() {
   const searchParams = useSearchParams()
   const [cateringServices, setCateringServices] = useState<CateringService[]>([])
   const [user, setUser] = useState<User | null>(null)
-  const [customer, setCustomer] = useState<Customer | null>(null)
   const [isAdmin, setIsAdmin] = useState(false)
   const [isCustomOrder, setIsCustomOrder] = useState(false)
   const [orderSuccess, setOrderSuccess] = useState(false)
@@ -58,6 +49,16 @@ export default function OrdersPage() {
 
   useEffect(() => {
     checkUserAndLoadOrders()
+
+    // Check for success message
+    const success = searchParams?.get("success")
+    const orderId = searchParams?.get("orderId")
+
+    if (success === "true" && orderId) {
+      setOrderSuccess(true)
+      // Clean up URL
+      window.history.replaceState({}, document.title, "/orders")
+    }
 
     const custom = searchParams?.get("custom")
     const items = searchParams?.get("items")
@@ -91,57 +92,34 @@ export default function OrdersPage() {
         return
       }
 
-      const currentUser = session.user
-      setUser(currentUser)
-
-      // Check if user is admin
-      const userIsAdmin = allowedAdmins.includes(currentUser.email || "")
-      setIsAdmin(userIsAdmin)
-
-      // Get customer record from our custom table
-      const customerResponse = await fetch("/api/customers/by-email", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ email: currentUser.email }),
-      })
-
-      let currentCustomer = null
-      if (customerResponse.ok) {
-        currentCustomer = await customerResponse.json()
-        setCustomer(currentCustomer)
-      }
-
-      // Load orders based on user role
-      await loadCateringServices(currentCustomer, userIsAdmin)
+      setUser(session.user)
+      await loadUserOrders(session.access_token)
     } catch (error) {
       console.error("Auth check failed:", error)
       window.location.href = "/login?redirect=/orders"
     }
   }
 
-  const loadCateringServices = async (currentCustomer: Customer | null, userIsAdmin: boolean) => {
+  const loadUserOrders = async (accessToken: string) => {
     try {
-      const response = await fetch("/api/catering-services")
+      const response = await fetch("/api/my-orders", {
+        headers: {
+          Authorization: `Bearer ${accessToken}`,
+        },
+      })
+
       if (response.ok) {
         const data = await response.json()
-
-        // Filter orders based on user role
-        let filteredServices = data
-        if (!userIsAdmin && currentCustomer) {
-          // Regular users only see their own orders
-          filteredServices = data.filter(
-            (service: CateringService) =>
-              service.customer_name === currentCustomer.name ||
-              service.customer_name === currentCustomer.email ||
-              service.customer_id === currentCustomer.id,
-          )
-        }
-        // Admins see all orders (no filtering needed)
-
-        setCateringServices(filteredServices)
+        setCateringServices(data.orders)
+        setIsAdmin(data.isAdmin)
+      } else if (response.status === 401) {
+        // Session expired, redirect to login
+        window.location.href = "/login?redirect=/orders"
+      } else {
+        throw new Error("Failed to load orders")
       }
     } catch (error) {
-      console.error("Error loading catering services:", error)
+      console.error("Error loading orders:", error)
     } finally {
       setIsLoading(false)
     }
@@ -232,26 +210,17 @@ export default function OrdersPage() {
               </div>
             </div>
             <div style={{ display: "flex", marginBottom: "10px" }}>
-              <div style={{ width: "150px", fontWeight: "500" }}>Event Type:</div>
-              <div style={{ flex: 1 }}>{formData.eventType}</div>
-            </div>
-            <div style={{ display: "flex", marginBottom: "10px" }}>
-              <div style={{ width: "150px", fontWeight: "500" }}>Event Date:</div>
-              <div style={{ flex: 1 }}>
-                {formData.eventDate
-                  ? new Date(formData.eventDate).toLocaleDateString("en-US", {
-                      month: "long",
-                      day: "numeric",
-                      year: "numeric",
-                    })
-                  : ""}
-              </div>
+              <div style={{ width: "150px", fontWeight: "500" }}>Status:</div>
+              <div style={{ flex: 1, color: "var(--warning-color)", fontWeight: "500" }}>Pending Approval</div>
             </div>
           </div>
 
           <div style={{ marginTop: "30px" }}>
             <button
-              onClick={() => (window.location.href = "/orders")}
+              onClick={() => {
+                setOrderSuccess(false)
+                window.location.reload()
+              }}
               className="btn btn-outline"
               style={{ marginRight: "10px" }}
             >
