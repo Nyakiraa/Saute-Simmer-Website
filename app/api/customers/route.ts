@@ -26,6 +26,11 @@ export async function POST(request: NextRequest) {
     const supabase = createServerClient()
     const body = await request.json()
 
+    // Validate required fields
+    if (!body.name || !body.email) {
+      return NextResponse.json({ error: "Name and email are required" }, { status: 400 })
+    }
+
     const { data: customer, error } = await supabase.from("customers").insert([body]).select().single()
 
     if (error) {
