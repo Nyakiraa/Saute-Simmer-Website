@@ -34,7 +34,7 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: "Customer record not found" }, { status: 404 })
     }
 
-    // Create the catering service order
+    // Create the catering service order for custom meals
     const cateringServiceData = {
       customer_id: customer.id,
       customer_name: customer.name,
@@ -43,7 +43,7 @@ export async function POST(request: NextRequest) {
       guest_count: orderData.quantity || 1,
       status: "pending",
       location: orderData.deliveryAddress,
-      special_requests: orderData.specialRequests || "",
+      special_requests: orderData.specialRequests || "Custom meal selection",
     }
 
     const { data: cateringService, error: cateringError } = await supabase
@@ -60,10 +60,10 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({
       success: true,
       order: cateringService,
-      message: "Order placed successfully",
+      message: "Custom meal order placed successfully",
     })
   } catch (error) {
-    console.error("Error in order creation:", error)
+    console.error("Error in custom order creation:", error)
     return NextResponse.json({ error: "Internal server error" }, { status: 500 })
   }
 }
