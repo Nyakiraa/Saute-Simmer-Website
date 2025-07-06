@@ -1,10 +1,12 @@
 import { type NextRequest, NextResponse } from "next/server"
 import { createServerClient } from "@/lib/supabase"
 
-export async function GET(request: NextRequest, { params }: { params: { id: string } }) {
+export async function GET(request: NextRequest, context: { params: Promise<{ id: string }> }) {
   try {
+    const { id } = await context.params
     const supabase = createServerClient()
-    const { data: location, error } = await supabase.from("locations").select("*").eq("id", params.id).single()
+
+    const { data: location, error } = await supabase.from("locations").select("*").eq("id", id).single()
 
     if (error) {
       console.error("Error fetching location:", error)
@@ -18,17 +20,13 @@ export async function GET(request: NextRequest, { params }: { params: { id: stri
   }
 }
 
-export async function PUT(request: NextRequest, { params }: { params: { id: string } }) {
+export async function PUT(request: NextRequest, context: { params: Promise<{ id: string }> }) {
   try {
+    const { id } = await context.params
     const supabase = createServerClient()
     const body = await request.json()
 
-    const { data: location, error } = await supabase
-      .from("locations")
-      .update(body)
-      .eq("id", params.id)
-      .select()
-      .single()
+    const { data: location, error } = await supabase.from("locations").update(body).eq("id", id).select().single()
 
     if (error) {
       console.error("Error updating location:", error)
@@ -42,10 +40,12 @@ export async function PUT(request: NextRequest, { params }: { params: { id: stri
   }
 }
 
-export async function DELETE(request: NextRequest, { params }: { params: { id: string } }) {
+export async function DELETE(request: NextRequest, context: { params: Promise<{ id: string }> }) {
   try {
+    const { id } = await context.params
     const supabase = createServerClient()
-    const { error } = await supabase.from("locations").delete().eq("id", params.id)
+
+    const { error } = await supabase.from("locations").delete().eq("id", id)
 
     if (error) {
       console.error("Error deleting location:", error)
