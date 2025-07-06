@@ -232,8 +232,8 @@ export default function OrderDetailsPage() {
       console.log("Session valid, preparing order data...")
 
       // Validate required fields
-      if (!formData.eventType || !formData.eventDate || !formData.deliveryAddress) {
-        setError("Please fill in all required fields (Event Type, Event Date, Delivery Address)")
+      if (!formData.eventType || !formData.eventDate || !formData.deliveryAddress || !formData.paymentMethod) {
+        setError("Please fill in all required fields (Event Type, Event Date, Delivery Address, Payment Method)")
         return
       }
 
@@ -248,6 +248,7 @@ export default function OrderDetailsPage() {
           eventType: formData.eventType,
           eventDate: formData.eventDate,
           deliveryAddress: formData.deliveryAddress,
+          paymentMethod: formData.paymentMethod,
           specialRequests: `${getCustomOrderDescription()}${
             formData.specialRequests ? `\nAdditional Requests: ${formData.specialRequests}` : ""
           }`,
@@ -262,6 +263,7 @@ export default function OrderDetailsPage() {
           eventType: formData.eventType,
           eventDate: formData.eventDate,
           deliveryAddress: formData.deliveryAddress,
+          paymentMethod: formData.paymentMethod,
           specialRequests: formData.specialRequests,
         }
         apiEndpoint = "/api/meal-set-orders"
@@ -285,7 +287,7 @@ export default function OrderDetailsPage() {
         const result = await response.json()
         console.log("Order placed successfully:", result)
         // Redirect to success page
-        window.location.href = `/orders?success=true&orderId=${result.order.id}`
+        window.location.href = `/orders?success=true&orderId=${result.order?.id || result.id}`
       } else {
         const errorData = await response.json()
         console.error("Order placement failed:", errorData)
@@ -719,6 +721,35 @@ export default function OrderDetailsPage() {
                   opacity: isSubmitting ? 0.6 : 1,
                 }}
               />
+            </div>
+
+            <div style={{ marginBottom: "20px" }}>
+              <label style={{ display: "block", marginBottom: "8px", fontWeight: "500" }}>Payment Method *</label>
+              <select
+                name="paymentMethod"
+                value={formData.paymentMethod}
+                onChange={handleInputChange}
+                required
+                disabled={isSubmitting}
+                style={{
+                  width: "100%",
+                  padding: "12px 15px",
+                  border: "1px solid #ddd",
+                  borderRadius: "8px",
+                  fontSize: "1rem",
+                  fontFamily: "Poppins, sans-serif",
+                  backgroundColor: "var(--light-text)",
+                  cursor: "pointer",
+                  opacity: isSubmitting ? 0.6 : 1,
+                }}
+              >
+                <option value="">Select payment method</option>
+                <option value="cash">Cash on Delivery</option>
+                <option value="bank">Bank Transfer</option>
+                <option value="gcash">GCash</option>
+                <option value="paymaya">PayMaya</option>
+                <option value="credit">Credit Card</option>
+              </select>
             </div>
 
             <div style={{ marginBottom: "20px" }}>
