@@ -6,6 +6,26 @@ import Footer from "../../components/Footer"
 import { supabase } from "@/lib/supabase-auth"
 import type { User } from "@supabase/supabase-js"
 
+interface Order {
+  id: number
+  customer_id: number
+  customer_name: string
+  customer_email: string
+  order_type: string
+  meal_set_name?: string
+  quantity: number
+  total_amount: number
+  event_type: string
+  event_date: string
+  delivery_address: string
+  contact_person: string
+  contact_number: string
+  payment_method: string
+  special_requests?: string
+  status: "pending" | "confirmed" | "completed" | "cancelled"
+  created_at: string
+}
+
 interface CateringService {
   id: number
   customer_id: number
@@ -16,14 +36,12 @@ interface CateringService {
   status: "pending" | "confirmed" | "completed" | "cancelled"
   location: string
   special_requests?: string
-  created_at?: string
+  type?: string
 }
-
-const allowedAdmins = ["ecbathan@gbox.adnu.edu.ph", "rabad@gbox.adnu.edu.ph", "charnepomuceno@gbox.adnu.edu.ph"]
 
 export default function OrdersPage() {
   const searchParams = useSearchParams()
-  const [cateringServices, setCateringServices] = useState<CateringService[]>([])
+  const [orders, setOrders] = useState<(Order | CateringService)[]>([])
   const [user, setUser] = useState<User | null>(null)
   const [isAdmin, setIsAdmin] = useState(false)
   const [isLoading, setIsLoading] = useState(true)
@@ -87,8 +105,6 @@ export default function OrdersPage() {
   const loadUserOrders = async (accessToken: string) => {
     try {
       console.log("Loading user orders...")
-      setError(null)
-
       const response = await fetch("/api/my-orders", {
         headers: {
           Authorization: `Bearer ${accessToken}`,
@@ -99,15 +115,11 @@ export default function OrdersPage() {
 
       if (response.ok) {
         const data = await response.json()
-        console.log("Orders data received:", data)
-
-        setCateringServices(data.orders || [])
+        console.log("Orders loaded successfully:", data)
+        setOrders(data.orders || [])
         setIsAdmin(data.isAdmin || false)
-
-        if (data.orders?.length === 0) {
-          console.log("No orders found for user")
-        }
       } else if (response.status === 401) {
+        // Session expired, redirect to login
         console.log("Session expired, redirecting to login")
         setTimeout(() => {
           window.location.href = "/login?redirect=/orders"
@@ -115,33 +127,20 @@ export default function OrdersPage() {
       } else {
         const errorData = await response.json()
         console.error("Failed to load orders:", errorData)
-        setError(errorData.error || "Failed to load orders")
+        setError(`Failed to load orders: ${errorData.error || "Unknown error"}`)
       }
     } catch (error) {
       console.error("Error loading orders:", error)
-      setError("Failed to fetch orders. Please check your connection.")
+      setError("Failed to fetch orders. Please check your connection and try again.")
     } finally {
       setIsLoading(false)
     }
   }
 
-  const retryLoadOrders = async () => {
+  const handleRetry = () => {
     setIsLoading(true)
     setError(null)
-
-    try {
-      const {
-        data: { session },
-      } = await supabase.auth.getSession()
-
-      if (session) {
-        await loadUserOrders(session.access_token)
-      }
-    } catch (error) {
-      console.error("Retry failed:", error)
-      setError("Retry failed")
-      setIsLoading(false)
-    }
+    checkUserAndLoadOrders()
   }
 
   if (orderSuccess) {
@@ -183,7 +182,7 @@ export default function OrdersPage() {
               marginRight: "auto",
             }}
           >
-            Thank you for your order. Your catering request has been submitted and is pending approval from our admin
+            Thank you for your order! Your catering request has been submitted and is pending approval from our admin
             team. You will receive a confirmation email shortly.
           </p>
           {successOrderId && (
@@ -211,7 +210,11 @@ export default function OrdersPage() {
           )}
           <div style={{ marginTop: "30px" }}>
             <button
-              onClick={() => window.location.reload()}
+              onClick={() => {
+                setOrderSuccess(false)
+                setSuccessOrderId(null)
+                handleRetry()
+              }}
               className="btn btn-outline"
               style={{ marginRight: "10px" }}
             >
@@ -245,19 +248,9 @@ export default function OrdersPage() {
         <Header />
         <div style={{ textAlign: "center", padding: "100px 20px" }}>
           <div style={{ fontSize: "2rem", marginBottom: "20px", color: "var(--danger-color)" }}>{error}</div>
-          <button onClick={retryLoadOrders} className="btn btn-primary">
+          <button onClick={handleRetry} className="btn btn-primary">
             Try Again
           </button>
-          <div style={{ marginTop: "20px" }}>
-            <a
-              href="/api/debug-orders"
-              target="_blank"
-              style={{ color: "var(--primary-color)", textDecoration: "underline" }}
-              rel="noreferrer"
-            >
-              View Debug Info
-            </a>
-          </div>
         </div>
         <Footer />
       </>
@@ -277,7 +270,7 @@ export default function OrdersPage() {
             textAlign: "center",
           }}
         >
-          {isAdmin ? "All Catering Services & Orders" : "My Orders"}
+          {isAdmin ? "All Orders & Catering Services" : "My Orders"}
         </h2>
         {isAdmin && (
           <p style={{ textAlign: "center", color: "#666", marginBottom: "20px" }}>
@@ -296,105 +289,146 @@ export default function OrdersPage() {
             gap: "30px",
           }}
         >
-          {cateringServices.length > 0 ? (
-            cateringServices.map((service) => (
-              <div
-                key={service.id}
-                style={{
-                  backgroundColor: "var(--light-text)",
-                  borderRadius: "15px",
-                  overflow: "hidden",
-                  boxShadow: "0 10px 20px var(--shadow-color)",
-                  transition: "transform 0.3s ease",
-                  cursor: "pointer",
-                }}
-                onClick={() => alert(`Service details for ${service.customer_name} will be shown here.`)}
-              >
+          {orders.length > 0 ? (
+            orders.map((order) => {
+              // Check if it's a new order or legacy catering service
+              const isNewOrder = "order_type" in order
+
+              return (
                 <div
+                  key={`${isNewOrder ? "order" : "catering"}-${order.id}`}
                   style={{
-                    padding: "20px",
-                    borderBottom: "1px solid #eee",
-                    display: "flex",
-                    justifyContent: "space-between",
-                    alignItems: "center",
+                    backgroundColor: "var(--light-text)",
+                    borderRadius: "15px",
+                    overflow: "hidden",
+                    boxShadow: "0 10px 20px var(--shadow-color)",
+                    transition: "transform 0.3s ease",
+                    cursor: "pointer",
                   }}
-                >
-                  <div style={{ fontWeight: "600", color: "var(--primary-color)" }}>#{service.id}</div>
-                  <div style={{ fontSize: "0.9rem", color: "#666" }}>
-                    {new Date(service.event_date).toLocaleDateString("en-US", {
-                      month: "long",
-                      day: "numeric",
-                      year: "numeric",
-                    })}
-                  </div>
-                </div>
-                <div style={{ padding: "20px" }}>
-                  <div style={{ marginBottom: "15px" }}>
-                    <div style={{ display: "flex", marginBottom: "8px" }}>
-                      <div style={{ width: "120px", fontWeight: "500", fontSize: "0.9rem" }}>Customer:</div>
-                      <div style={{ flex: 1, fontSize: "0.9rem" }}>{service.customer_name}</div>
-                    </div>
-                    <div style={{ display: "flex", marginBottom: "8px" }}>
-                      <div style={{ width: "120px", fontWeight: "500", fontSize: "0.9rem" }}>Event Type:</div>
-                      <div style={{ flex: 1, fontSize: "0.9rem" }}>{service.event_type}</div>
-                    </div>
-                    <div style={{ display: "flex", marginBottom: "8px" }}>
-                      <div style={{ width: "120px", fontWeight: "500", fontSize: "0.9rem" }}>Event Date:</div>
-                      <div style={{ flex: 1, fontSize: "0.9rem" }}>
-                        {new Date(service.event_date).toLocaleDateString("en-US", {
-                          month: "long",
-                          day: "numeric",
-                          year: "numeric",
-                        })}
-                      </div>
-                    </div>
-                    <div style={{ display: "flex", marginBottom: "8px" }}>
-                      <div style={{ width: "120px", fontWeight: "500", fontSize: "0.9rem" }}>Guests:</div>
-                      <div style={{ flex: 1, fontSize: "0.9rem" }}>{service.guest_count} persons</div>
-                    </div>
-                    <div style={{ display: "flex", marginBottom: "8px" }}>
-                      <div style={{ width: "120px", fontWeight: "500", fontSize: "0.9rem" }}>Location:</div>
-                      <div style={{ flex: 1, fontSize: "0.9rem" }}>{service.location}</div>
-                    </div>
-                    {service.special_requests && (
-                      <div style={{ display: "flex", marginBottom: "8px" }}>
-                        <div style={{ width: "120px", fontWeight: "500", fontSize: "0.9rem" }}>Special Requests:</div>
-                        <div style={{ flex: 1, fontSize: "0.9rem" }}>{service.special_requests}</div>
-                      </div>
-                    )}
-                  </div>
-                </div>
-                <div
-                  style={{
-                    padding: "15px 20px",
-                    backgroundColor: "#f9f9f9",
-                    display: "flex",
-                    justifyContent: "flex-end",
-                    alignItems: "center",
+                  onClick={() => {
+                    if (isNewOrder) {
+                      alert(
+                        `Order #${order.id} details:\n\nType: ${(order as Order).order_type}\nTotal: ₱${(order as Order).total_amount}\nPayment: ${(order as Order).payment_method}`,
+                      )
+                    } else {
+                      alert(`Service details for ${order.customer_name} will be shown here.`)
+                    }
                   }}
                 >
                   <div
                     style={{
-                      padding: "5px 15px",
-                      borderRadius: "50px",
-                      fontSize: "0.8rem",
-                      fontWeight: "500",
-                      backgroundColor:
-                        service.status === "confirmed"
-                          ? "var(--success-color)"
-                          : service.status === "pending"
-                            ? "var(--warning-color)"
-                            : service.status === "completed"
-                              ? "#2196f3"
-                              : "var(--danger-color)",
-                      color: "var(--light-text)",
+                      padding: "20px",
+                      borderBottom: "1px solid #eee",
+                      display: "flex",
+                      justifyContent: "space-between",
+                      alignItems: "center",
                     }}
                   >
-                    {service.status.charAt(0).toUpperCase() + service.status.slice(1)}
+                    <div style={{ fontWeight: "600", color: "var(--primary-color)" }}>
+                      #{order.id} {isNewOrder && `(${(order as Order).order_type})`}
+                    </div>
+                    <div style={{ fontSize: "0.9rem", color: "#666" }}>
+                      {new Date(
+                        isNewOrder ? (order as Order).event_date : (order as CateringService).event_date,
+                      ).toLocaleDateString("en-US", {
+                        month: "long",
+                        day: "numeric",
+                        year: "numeric",
+                      })}
+                    </div>
+                  </div>
+                  <div style={{ padding: "20px" }}>
+                    <div style={{ marginBottom: "15px" }}>
+                      <div style={{ display: "flex", marginBottom: "8px" }}>
+                        <div style={{ width: "120px", fontWeight: "500", fontSize: "0.9rem" }}>Customer:</div>
+                        <div style={{ flex: 1, fontSize: "0.9rem" }}>{order.customer_name}</div>
+                      </div>
+                      <div style={{ display: "flex", marginBottom: "8px" }}>
+                        <div style={{ width: "120px", fontWeight: "500", fontSize: "0.9rem" }}>Event Type:</div>
+                        <div style={{ flex: 1, fontSize: "0.9rem" }}>{order.event_type}</div>
+                      </div>
+                      {isNewOrder && (
+                        <>
+                          <div style={{ display: "flex", marginBottom: "8px" }}>
+                            <div style={{ width: "120px", fontWeight: "500", fontSize: "0.9rem" }}>Meal Set:</div>
+                            <div style={{ flex: 1, fontSize: "0.9rem" }}>
+                              {(order as Order).meal_set_name || "Custom Order"}
+                            </div>
+                          </div>
+                          <div style={{ display: "flex", marginBottom: "8px" }}>
+                            <div style={{ width: "120px", fontWeight: "500", fontSize: "0.9rem" }}>Quantity:</div>
+                            <div style={{ flex: 1, fontSize: "0.9rem" }}>{(order as Order).quantity} persons</div>
+                          </div>
+                          <div style={{ display: "flex", marginBottom: "8px" }}>
+                            <div style={{ width: "120px", fontWeight: "500", fontSize: "0.9rem" }}>Total:</div>
+                            <div
+                              style={{ flex: 1, fontSize: "0.9rem", fontWeight: "600", color: "var(--primary-color)" }}
+                            >
+                              ₱{(order as Order).total_amount?.toFixed(2) || "0.00"}
+                            </div>
+                          </div>
+                          <div style={{ display: "flex", marginBottom: "8px" }}>
+                            <div style={{ width: "120px", fontWeight: "500", fontSize: "0.9rem" }}>Payment:</div>
+                            <div style={{ flex: 1, fontSize: "0.9rem", textTransform: "capitalize" }}>
+                              {(order as Order).payment_method || "Not specified"}
+                            </div>
+                          </div>
+                        </>
+                      )}
+                      {!isNewOrder && (
+                        <>
+                          <div style={{ display: "flex", marginBottom: "8px" }}>
+                            <div style={{ width: "120px", fontWeight: "500", fontSize: "0.9rem" }}>Guests:</div>
+                            <div style={{ flex: 1, fontSize: "0.9rem" }}>
+                              {(order as CateringService).guest_count} persons
+                            </div>
+                          </div>
+                          <div style={{ display: "flex", marginBottom: "8px" }}>
+                            <div style={{ width: "120px", fontWeight: "500", fontSize: "0.9rem" }}>Location:</div>
+                            <div style={{ flex: 1, fontSize: "0.9rem" }}>{(order as CateringService).location}</div>
+                          </div>
+                        </>
+                      )}
+                      {order.special_requests && (
+                        <div style={{ display: "flex", marginBottom: "8px" }}>
+                          <div style={{ width: "120px", fontWeight: "500", fontSize: "0.9rem" }}>Special Requests:</div>
+                          <div style={{ flex: 1, fontSize: "0.9rem" }}>{order.special_requests}</div>
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                  <div
+                    style={{
+                      padding: "15px 20px",
+                      backgroundColor: "#f9f9f9",
+                      display: "flex",
+                      justifyContent: "flex-end",
+                      alignItems: "center",
+                    }}
+                  >
+                    <div
+                      style={{
+                        padding: "5px 15px",
+                        borderRadius: "50px",
+                        fontSize: "0.8rem",
+                        fontWeight: "500",
+                        backgroundColor:
+                          order.status === "confirmed"
+                            ? "var(--success-color)"
+                            : order.status === "pending"
+                              ? "var(--warning-color)"
+                              : order.status === "completed"
+                                ? "#2196f3"
+                                : "var(--danger-color)",
+                        color: "var(--light-text)",
+                      }}
+                    >
+                      {order.status.charAt(0).toUpperCase() + order.status.slice(1)}
+                    </div>
                   </div>
                 </div>
-              </div>
-            ))
+              )
+            })
           ) : (
             <div
               style={{
