@@ -40,10 +40,10 @@ export async function POST(request: NextRequest) {
       customer_name: customer.name,
       event_type: orderData.eventType,
       event_date: orderData.eventDate,
-      guest_count: orderData.guestCount || 1,
+      guest_count: orderData.quantity || 1,
       status: "pending",
       location: orderData.deliveryAddress,
-      special_requests: orderData.specialRequests || null,
+      special_requests: orderData.specialRequests || "",
     }
 
     const { data: cateringService, error: cateringError } = await supabase
