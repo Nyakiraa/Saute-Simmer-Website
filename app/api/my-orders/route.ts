@@ -15,14 +15,20 @@ export async function GET(request: NextRequest) {
     const supabase = createServerClient()
 
     // Verify the token and get user
+    console.log("Verifying user token...")
     const {
       data: { user },
       error: authError,
     } = await supabase.auth.getUser(token)
 
-    if (authError || !user) {
+    if (authError) {
       console.error("Auth error:", authError)
       return NextResponse.json({ error: "Invalid token" }, { status: 401 })
+    }
+
+    if (!user) {
+      console.log("No user found from token")
+      return NextResponse.json({ error: "User not found" }, { status: 401 })
     }
 
     console.log("User authenticated:", user.email)
@@ -39,83 +45,68 @@ export async function GET(request: NextRequest) {
       .eq("email", user.email)
       .single()
 
-    if (customerError || !customer) {
+    if (customerError && !isAdmin) {
       console.error("Customer lookup error:", customerError)
       return NextResponse.json({ error: "Customer record not found" }, { status: 404 })
     }
 
-    console.log("Customer found:", customer.name)
+    let ordersQuery = supabase.from("orders").select(`
+      *,
+      catering_services!inner(
+        id,
+        event_type,
+        guest_count,
+        location,
+        special_requests
+      ),
+      locations(
+        id,
+        name,
+        address,
+        city,
+        state,
+        country
+      ),
+      payments(
+        id,
+        amount,
+        payment_method,
+        payment_status,
+        transaction_id,
+        payment_date
+      )
+    `)
 
-    // Build query for orders with related data
-    let query = supabase.from("orders").select(`
-        *,
-        payments (
-          id,
-          amount,
-          payment_method,
-          payment_status,
-          transaction_id,
-          payment_date
-        ),
-        locations (
-          id,
-          name,
-          address,
-          city,
-          state,
-          country
-        )
-      `)
-
-    // If not admin, filter by customer_id
-    if (!isAdmin) {
-      query = query.eq("customer_id", customer.id)
+    // If not admin, filter by customer
+    if (!isAdmin && customer) {
+      ordersQuery = ordersQuery.eq("customer_id", customer.id)
     }
 
     // Order by creation date (newest first)
-    query = query.order("created_at", { ascending: false })
+    ordersQuery = ordersQuery.order("created_at", { ascending: false })
 
-    const { data: orders, error: ordersError } = await query
+    console.log("Executing orders query...")
+    const { data: orders, error: ordersError } = await ordersQuery
 
     if (ordersError) {
       console.error("Orders query error:", ordersError)
       return NextResponse.json({ error: "Failed to fetch orders" }, { status: 500 })
     }
 
-    // Get catering services for each order
-    const orderIds = orders?.map((order) => order.id) || []
-    let cateringServices = []
+    console.log("Orders fetched successfully:", orders?.length || 0)
 
-    if (orderIds.length > 0) {
-      const { data: services, error: servicesError } = await supabase
-        .from("catering_services")
-        .select("*")
-        .in("order_id", orderIds)
-
-      if (!servicesError) {
-        cateringServices = services || []
-      }
-    }
-
-    // Combine orders with their catering services
-    const ordersWithServices =
-      orders?.map((order) => {
-        const service = cateringServices.find((s) => s.order_id === order.id)
-        return {
-          ...order,
-          catering_service: service || null,
-          payment: Array.isArray(order.payments) ? order.payments[0] : order.payments,
-          location: Array.isArray(order.locations) ? order.locations[0] : order.locations,
-        }
-      }) || []
-
-    console.log("Orders fetched successfully:", ordersWithServices.length)
+    // Transform the data to match the expected format
+    const transformedOrders = orders?.map((order) => ({
+      ...order,
+      catering_service: order.catering_services?.[0] || null,
+      location: order.locations?.[0] || null,
+      payment: order.payments?.[0] || null,
+    }))
 
     return NextResponse.json({
       success: true,
-      orders: ordersWithServices,
-      isAdmin: isAdmin,
-      customer: customer,
+      orders: transformedOrders || [],
+      isAdmin,
     })
   } catch (error) {
     console.error("=== My Orders API Error ===")
