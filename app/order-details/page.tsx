@@ -1,7 +1,6 @@
 "use client"
 
 import type React from "react"
-
 import { useState, useEffect } from "react"
 import { useSearchParams } from "next/navigation"
 import Header from "../../components/Header"
@@ -17,13 +16,30 @@ interface MealSet {
   comment?: string
 }
 
+interface MenuItem {
+  id: number
+  name: string
+  price: number
+  category: "snack" | "main" | "side" | "beverage"
+  description: string
+}
+
+interface CustomItems {
+  snack: MenuItem[]
+  main: MenuItem[]
+  side: MenuItem[]
+  beverage: MenuItem[]
+}
+
 export default function OrderDetailsPage() {
   const searchParams = useSearchParams()
   const [mealSet, setMealSet] = useState<MealSet | null>(null)
+  const [customItems, setCustomItems] = useState<CustomItems | null>(null)
   const [quantity, setQuantity] = useState(1)
   const [isLoading, setIsLoading] = useState(true)
   const [isSubmitting, setIsSubmitting] = useState(false)
   const [user, setUser] = useState<any>(null)
+  const [isCustomOrder, setIsCustomOrder] = useState(false)
   const [formData, setFormData] = useState({
     eventType: "",
     eventDate: "",
@@ -65,12 +81,31 @@ export default function OrderDetailsPage() {
         contactPerson: session.user.user_metadata?.full_name || session.user.user_metadata?.name || "",
       }))
 
-      // Load meal set data if it's a meal set order
+      // Check if it's a custom order or meal set order
+      const customParam = searchParams?.get("custom")
       const setId = searchParams?.get("set")
       const quantityParam = searchParams?.get("quantity")
+      const itemsParam = searchParams?.get("items")
 
-      if (setId) {
+      if (customParam === "true" && itemsParam) {
+        // Handle custom meal order
+        setIsCustomOrder(true)
+        try {
+          const decodedItems = JSON.parse(decodeURIComponent(itemsParam))
+          setCustomItems(decodedItems)
+        } catch (error) {
+          console.error("Error parsing custom items:", error)
+          window.location.href = "/custom-meals"
+          return
+        }
+      } else if (setId) {
+        // Handle meal set order
+        setIsCustomOrder(false)
         await loadMealSet(Number.parseInt(setId))
+      } else {
+        // No valid parameters, redirect
+        window.location.href = "/meals"
+        return
       }
 
       if (quantityParam) {
@@ -116,6 +151,30 @@ export default function OrderDetailsPage() {
     })
   }
 
+  const getCustomOrderTotal = () => {
+    if (!customItems) return 0
+    let total = 0
+    Object.values(customItems).forEach((categoryItems) => {
+      categoryItems.forEach((item) => {
+        total += item.price
+      })
+    })
+    return total
+  }
+
+  const getCustomOrderDescription = () => {
+    if (!customItems) return ""
+    let description = "Custom Meal Selection:\n"
+
+    Object.entries(customItems).forEach(([category, items]) => {
+      if (items.length > 0) {
+        description += `${category.charAt(0).toUpperCase() + category.slice(1)}s: ${items.map((item) => item.name).join(", ")}\n`
+      }
+    })
+
+    return description
+  }
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
     setIsSubmitting(true)
@@ -131,16 +190,35 @@ export default function OrderDetailsPage() {
         return
       }
 
-      const orderData = {
-        mealSetId: mealSet?.id,
-        quantity: quantity,
-        eventType: formData.eventType,
-        eventDate: formData.eventDate,
-        deliveryAddress: formData.deliveryAddress,
-        specialRequests: formData.specialRequests,
+      let orderData
+      let apiEndpoint
+
+      if (isCustomOrder) {
+        // Custom meal order
+        orderData = {
+          quantity: quantity,
+          eventType: formData.eventType,
+          eventDate: formData.eventDate,
+          deliveryAddress: formData.deliveryAddress,
+          specialRequests: `${getCustomOrderDescription()}${
+            formData.specialRequests ? `\nAdditional Requests: ${formData.specialRequests}` : ""
+          }`,
+        }
+        apiEndpoint = "/api/orders"
+      } else {
+        // Meal set order
+        orderData = {
+          mealSetId: mealSet?.id,
+          quantity: quantity,
+          eventType: formData.eventType,
+          eventDate: formData.eventDate,
+          deliveryAddress: formData.deliveryAddress,
+          specialRequests: formData.specialRequests,
+        }
+        apiEndpoint = "/api/meal-set-orders"
       }
 
-      const response = await fetch("/api/meal-set-orders", {
+      const response = await fetch(apiEndpoint, {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
@@ -177,7 +255,7 @@ export default function OrderDetailsPage() {
     )
   }
 
-  if (!mealSet) {
+  if (!isCustomOrder && !mealSet) {
     return (
       <>
         <Header />
@@ -185,6 +263,23 @@ export default function OrderDetailsPage() {
           <div style={{ fontSize: "2rem", marginBottom: "20px", color: "var(--danger-color)" }}>Meal set not found</div>
           <button onClick={() => (window.location.href = "/meals")} className="btn btn-primary">
             Back to Meal Sets
+          </button>
+        </div>
+        <Footer />
+      </>
+    )
+  }
+
+  if (isCustomOrder && !customItems) {
+    return (
+      <>
+        <Header />
+        <div style={{ textAlign: "center", padding: "100px 20px" }}>
+          <div style={{ fontSize: "2rem", marginBottom: "20px", color: "var(--danger-color)" }}>
+            Custom items not found
+          </div>
+          <button onClick={() => (window.location.href = "/custom-meals")} className="btn btn-primary">
+            Back to Custom Meals
           </button>
         </div>
         <Footer />
@@ -224,53 +319,116 @@ export default function OrderDetailsPage() {
             Order Details
           </h2>
 
-          <div style={{ marginBottom: "20px" }}>
-            <div style={{ display: "flex", marginBottom: "10px" }}>
-              <div style={{ width: "150px", fontWeight: "500" }}>Meal Set:</div>
-              <div style={{ flex: 1 }}>{mealSet.name}</div>
-            </div>
-            <div style={{ display: "flex", marginBottom: "10px" }}>
-              <div style={{ width: "150px", fontWeight: "500" }}>Type:</div>
-              <div style={{ flex: 1, textTransform: "capitalize" }}>{mealSet.type}</div>
-            </div>
-            <div style={{ display: "flex", marginBottom: "10px" }}>
-              <div style={{ width: "150px", fontWeight: "500" }}>Price per person:</div>
-              <div style={{ flex: 1 }}>₱{mealSet.price.toFixed(2)}</div>
-            </div>
-            <div style={{ display: "flex", marginBottom: "10px" }}>
-              <div style={{ width: "150px", fontWeight: "500" }}>Quantity:</div>
-              <div style={{ flex: 1 }}>{quantity} persons</div>
-            </div>
-          </div>
-
-          <div style={{ marginBottom: "20px" }}>
-            <h3
-              style={{
-                fontSize: "1.2rem",
-                color: "var(--primary-color)",
-                marginBottom: "10px",
-              }}
-            >
-              Description
-            </h3>
-            <p style={{ color: "#666", lineHeight: "1.6" }}>{mealSet.description}</p>
-            {mealSet.comment && (
-              <div
-                style={{
-                  marginTop: "15px",
-                  padding: "15px",
-                  backgroundColor: "var(--secondary-color)",
-                  borderRadius: "10px",
-                  fontWeight: "600",
-                  color: "var(--primary-color)",
-                  border: "2px dashed var(--primary-color)",
-                }}
-              >
-                <i className="fas fa-info-circle" style={{ marginRight: "10px" }}></i>
-                {mealSet.comment}
+          {isCustomOrder ? (
+            // Custom Order Details
+            <div style={{ marginBottom: "20px" }}>
+              <div style={{ display: "flex", marginBottom: "10px" }}>
+                <div style={{ width: "150px", fontWeight: "500" }}>Order Type:</div>
+                <div style={{ flex: 1 }}>Custom Meal Selection</div>
               </div>
-            )}
-          </div>
+              <div style={{ display: "flex", marginBottom: "10px" }}>
+                <div style={{ width: "150px", fontWeight: "500" }}>Price per person:</div>
+                <div style={{ flex: 1 }}>₱{getCustomOrderTotal().toFixed(2)}</div>
+              </div>
+              <div style={{ display: "flex", marginBottom: "10px" }}>
+                <div style={{ width: "150px", fontWeight: "500" }}>Quantity:</div>
+                <div style={{ flex: 1 }}>{quantity} persons</div>
+              </div>
+
+              <div style={{ marginTop: "20px" }}>
+                <h3
+                  style={{
+                    fontSize: "1.2rem",
+                    color: "var(--primary-color)",
+                    marginBottom: "10px",
+                  }}
+                >
+                  Selected Items
+                </h3>
+                {Object.entries(customItems || {}).map(([category, items]) => {
+                  if (items.length === 0) return null
+                  return (
+                    <div key={category} style={{ marginBottom: "15px" }}>
+                      <h4
+                        style={{
+                          fontSize: "1rem",
+                          color: "var(--primary-color)",
+                          marginBottom: "8px",
+                          textTransform: "capitalize",
+                        }}
+                      >
+                        {category}s:
+                      </h4>
+                      {items.map((item) => (
+                        <div
+                          key={item.id}
+                          style={{
+                            display: "flex",
+                            justifyContent: "space-between",
+                            marginBottom: "5px",
+                            paddingLeft: "15px",
+                            fontSize: "0.9rem",
+                          }}
+                        >
+                          <span>{item.name}</span>
+                          <span>₱{item.price}</span>
+                        </div>
+                      ))}
+                    </div>
+                  )
+                })}
+              </div>
+            </div>
+          ) : (
+            // Meal Set Details
+            <div style={{ marginBottom: "20px" }}>
+              <div style={{ display: "flex", marginBottom: "10px" }}>
+                <div style={{ width: "150px", fontWeight: "500" }}>Meal Set:</div>
+                <div style={{ flex: 1 }}>{mealSet?.name}</div>
+              </div>
+              <div style={{ display: "flex", marginBottom: "10px" }}>
+                <div style={{ width: "150px", fontWeight: "500" }}>Type:</div>
+                <div style={{ flex: 1, textTransform: "capitalize" }}>{mealSet?.type}</div>
+              </div>
+              <div style={{ display: "flex", marginBottom: "10px" }}>
+                <div style={{ width: "150px", fontWeight: "500" }}>Price per person:</div>
+                <div style={{ flex: 1 }}>₱{mealSet?.price.toFixed(2)}</div>
+              </div>
+              <div style={{ display: "flex", marginBottom: "10px" }}>
+                <div style={{ width: "150px", fontWeight: "500" }}>Quantity:</div>
+                <div style={{ flex: 1 }}>{quantity} persons</div>
+              </div>
+
+              <div style={{ marginBottom: "20px" }}>
+                <h3
+                  style={{
+                    fontSize: "1.2rem",
+                    color: "var(--primary-color)",
+                    marginBottom: "10px",
+                  }}
+                >
+                  Description
+                </h3>
+                <p style={{ color: "#666", lineHeight: "1.6" }}>{mealSet?.description}</p>
+                {mealSet?.comment && (
+                  <div
+                    style={{
+                      marginTop: "15px",
+                      padding: "15px",
+                      backgroundColor: "var(--secondary-color)",
+                      borderRadius: "10px",
+                      fontWeight: "600",
+                      color: "var(--primary-color)",
+                      border: "2px dashed var(--primary-color)",
+                    }}
+                  >
+                    <i className="fas fa-info-circle" style={{ marginRight: "10px" }}></i>
+                    {mealSet?.comment}
+                  </div>
+                )}
+              </div>
+            </div>
+          )}
 
           <div
             style={{
@@ -281,7 +439,9 @@ export default function OrderDetailsPage() {
           >
             <div style={{ display: "flex", justifyContent: "space-between", marginBottom: "10px" }}>
               <div style={{ fontWeight: "500" }}>Subtotal (per person):</div>
-              <div style={{ fontWeight: "600" }}>₱{mealSet.price.toFixed(2)}</div>
+              <div style={{ fontWeight: "600" }}>
+                ₱{(isCustomOrder ? getCustomOrderTotal() : mealSet?.price || 0).toFixed(2)}
+              </div>
             </div>
             <div style={{ display: "flex", justifyContent: "space-between", marginBottom: "10px" }}>
               <div style={{ fontWeight: "500" }}>Quantity:</div>
@@ -300,7 +460,7 @@ export default function OrderDetailsPage() {
               }}
             >
               <div>Total:</div>
-              <div>₱{(mealSet.price * quantity).toFixed(2)}</div>
+              <div>₱{((isCustomOrder ? getCustomOrderTotal() : mealSet?.price || 0) * quantity).toFixed(2)}</div>
             </div>
           </div>
         </div>
