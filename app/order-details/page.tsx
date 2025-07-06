@@ -40,6 +40,7 @@ export default function OrderDetailsPage() {
   const [isSubmitting, setIsSubmitting] = useState(false)
   const [user, setUser] = useState<any>(null)
   const [isCustomOrder, setIsCustomOrder] = useState(false)
+  const [error, setError] = useState<string | null>(null)
   const [formData, setFormData] = useState({
     eventType: "",
     eventDate: "",
@@ -61,17 +62,27 @@ export default function OrderDetailsPage() {
 
   const checkUserAndLoadData = async () => {
     try {
+      console.log("Checking user authentication...")
+
       // Check if user is logged in
       const {
         data: { session },
         error,
       } = await supabase.auth.getSession()
 
-      if (error || !session) {
+      if (error) {
+        console.error("Session error:", error)
         window.location.href = "/login?redirect=/order-details"
         return
       }
 
+      if (!session) {
+        console.log("No session found, redirecting to login")
+        window.location.href = "/login?redirect=/order-details"
+        return
+      }
+
+      console.log("User authenticated:", session.user.email)
       setUser(session.user)
 
       // Pre-fill user data
@@ -87,29 +98,43 @@ export default function OrderDetailsPage() {
       const quantityParam = searchParams?.get("quantity")
       const itemsParam = searchParams?.get("items")
 
+      console.log("URL params:", { customParam, setId, quantityParam, itemsParam: !!itemsParam })
+
       if (customParam === "true" && itemsParam) {
         // Handle custom meal order
+        console.log("Processing custom order")
         setIsCustomOrder(true)
         try {
           const decodedItems = JSON.parse(decodeURIComponent(itemsParam))
+          console.log("Custom items parsed:", decodedItems)
           setCustomItems(decodedItems)
         } catch (error) {
           console.error("Error parsing custom items:", error)
-          window.location.href = "/custom-meals"
+          setError("Invalid custom items data")
+          setTimeout(() => {
+            window.location.href = "/custom-meals"
+          }, 2000)
           return
         }
       } else if (setId) {
         // Handle meal set order
+        console.log("Processing meal set order, ID:", setId)
         setIsCustomOrder(false)
         await loadMealSet(Number.parseInt(setId))
       } else {
         // No valid parameters, redirect
-        window.location.href = "/meals"
+        console.log("No valid parameters, redirecting")
+        setError("Invalid order parameters")
+        setTimeout(() => {
+          window.location.href = "/meals"
+        }, 2000)
         return
       }
 
       if (quantityParam) {
-        setQuantity(Number.parseInt(quantityParam))
+        const qty = Number.parseInt(quantityParam)
+        console.log("Setting quantity:", qty)
+        setQuantity(qty)
       }
 
       // Set minimum dates
@@ -126,7 +151,10 @@ export default function OrderDetailsPage() {
       }, 100)
     } catch (error) {
       console.error("Auth check failed:", error)
-      window.location.href = "/login"
+      setError("Authentication failed")
+      setTimeout(() => {
+        window.location.href = "/login"
+      }, 2000)
     } finally {
       setIsLoading(false)
     }
@@ -134,13 +162,19 @@ export default function OrderDetailsPage() {
 
   const loadMealSet = async (setId: number) => {
     try {
+      console.log("Loading meal set:", setId)
       const response = await fetch(`/api/meal-sets/${setId}`)
       if (response.ok) {
         const data = await response.json()
+        console.log("Meal set loaded:", data)
         setMealSet(data)
+      } else {
+        console.error("Failed to load meal set:", response.status)
+        setError("Failed to load meal set")
       }
     } catch (error) {
       console.error("Error loading meal set:", error)
+      setError("Error loading meal set")
     }
   }
 
@@ -178,15 +212,28 @@ export default function OrderDetailsPage() {
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
     setIsSubmitting(true)
+    setError(null)
 
     try {
+      console.log("=== Starting Order Submission ===")
+
       const {
         data: { session },
       } = await supabase.auth.getSession()
 
       if (!session) {
-        alert("Please login to place an order.")
-        window.location.href = "/login"
+        setError("Please login to place an order.")
+        setTimeout(() => {
+          window.location.href = "/login"
+        }, 2000)
+        return
+      }
+
+      console.log("Session valid, preparing order data...")
+
+      // Validate required fields
+      if (!formData.eventType || !formData.eventDate || !formData.deliveryAddress) {
+        setError("Please fill in all required fields (Event Type, Event Date, Delivery Address)")
         return
       }
 
@@ -195,6 +242,7 @@ export default function OrderDetailsPage() {
 
       if (isCustomOrder) {
         // Custom meal order
+        console.log("Preparing custom meal order")
         orderData = {
           quantity: quantity,
           eventType: formData.eventType,
@@ -207,6 +255,7 @@ export default function OrderDetailsPage() {
         apiEndpoint = "/api/orders"
       } else {
         // Meal set order
+        console.log("Preparing meal set order")
         orderData = {
           mealSetId: mealSet?.id,
           quantity: quantity,
@@ -218,6 +267,9 @@ export default function OrderDetailsPage() {
         apiEndpoint = "/api/meal-set-orders"
       }
 
+      console.log("Order data:", orderData)
+      console.log("API endpoint:", apiEndpoint)
+
       const response = await fetch(apiEndpoint, {
         method: "POST",
         headers: {
@@ -227,17 +279,26 @@ export default function OrderDetailsPage() {
         body: JSON.stringify(orderData),
       })
 
+      console.log("API response status:", response.status)
+
       if (response.ok) {
         const result = await response.json()
+        console.log("Order placed successfully:", result)
         // Redirect to success page
         window.location.href = `/orders?success=true&orderId=${result.order.id}`
       } else {
-        const error = await response.json()
-        alert(error.error || "Failed to place order. Please try again.")
+        const errorData = await response.json()
+        console.error("Order placement failed:", errorData)
+        setError(errorData.error || "Failed to place order. Please try again.")
+
+        // Show more detailed error if available
+        if (errorData.details) {
+          console.error("Error details:", errorData.details)
+        }
       }
     } catch (error) {
       console.error("Order submission failed:", error)
-      alert("Failed to place order. Please try again.")
+      setError("Failed to place order. Please check your connection and try again.")
     } finally {
       setIsSubmitting(false)
     }
@@ -249,6 +310,21 @@ export default function OrderDetailsPage() {
         <Header />
         <div style={{ textAlign: "center", padding: "100px 20px" }}>
           <div style={{ fontSize: "2rem", marginBottom: "20px" }}>Loading order details...</div>
+        </div>
+        <Footer />
+      </>
+    )
+  }
+
+  if (error) {
+    return (
+      <>
+        <Header />
+        <div style={{ textAlign: "center", padding: "100px 20px" }}>
+          <div style={{ fontSize: "2rem", marginBottom: "20px", color: "var(--danger-color)" }}>{error}</div>
+          <button onClick={() => window.history.back()} className="btn btn-primary">
+            Go Back
+          </button>
         </div>
         <Footer />
       </>
@@ -318,6 +394,22 @@ export default function OrderDetailsPage() {
           >
             Order Details
           </h2>
+
+          {/* Error Display */}
+          {error && (
+            <div
+              style={{
+                backgroundColor: "#f8d7da",
+                border: "1px solid #f5c6cb",
+                borderRadius: "8px",
+                padding: "15px",
+                marginBottom: "20px",
+                color: "#721c24",
+              }}
+            >
+              {error}
+            </div>
+          )}
 
           {isCustomOrder ? (
             // Custom Order Details
