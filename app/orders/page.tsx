@@ -6,6 +6,7 @@ import { useState, useEffect } from "react"
 import { useSearchParams } from "next/navigation"
 import Header from "../../components/Header"
 import Footer from "../../components/Footer"
+import { supabase } from "@/lib/supabase-auth"
 
 interface CateringService {
   id: number
@@ -41,37 +42,47 @@ export default function OrdersPage() {
   })
 
   useEffect(() => {
-    loadCateringServices()
+    const checkAuthAndLoadOrders = async () => {
+      try {
+        const {
+          data: { session },
+          error,
+        } = await supabase.auth.getSession()
 
-    const custom = searchParams?.get("custom")
-    const items = searchParams?.get("items")
+        if (error || !session) {
+          alert("Please login to view your orders.")
+          window.location.href = "/login?redirect=/orders"
+          return
+        }
 
-    if (custom === "true" && items) {
-      setIsCustomOrder(true)
-      // Set minimum dates
-      const tomorrow = new Date()
-      tomorrow.setDate(tomorrow.getDate() + 1)
-      const minDate = tomorrow.toISOString().split("T")[0]
-
-      const eventDateInput = document.getElementById("event-date") as HTMLInputElement
-      const deliveryDateInput = document.getElementById("delivery-date") as HTMLInputElement
-
-      if (eventDateInput) eventDateInput.min = minDate
-      if (deliveryDateInput) deliveryDateInput.min = minDate
+        await loadCateringServices()
+      } catch (error) {
+        console.error("Auth check failed:", error)
+        window.location.href = "/login"
+      } finally {
+        setIsLoading(false)
+      }
     }
-  }, [searchParams])
+
+    checkAuthAndLoadOrders()
+  }, [])
 
   const loadCateringServices = async () => {
     try {
+      const {
+        data: { session },
+      } = await supabase.auth.getSession()
+      if (!session) return
+
       const response = await fetch("/api/catering-services")
       if (response.ok) {
         const data = await response.json()
+        // Filter orders by user email (assuming customer_name contains email or we match by email)
+        // For now, we'll show all orders, but in production you'd filter by user
         setCateringServices(data)
       }
     } catch (error) {
       console.error("Error loading catering services:", error)
-    } finally {
-      setIsLoading(false)
     }
   }
 
@@ -188,396 +199,6 @@ export default function OrdersPage() {
             <button onClick={() => (window.location.href = "/")} className="btn btn-primary">
               Back to Home
             </button>
-          </div>
-        </section>
-        <Footer />
-      </>
-    )
-  }
-
-  if (isCustomOrder) {
-    return (
-      <>
-        <Header />
-        <section
-          style={{
-            display: "grid",
-            gridTemplateColumns: "1fr 350px",
-            gap: "30px",
-            maxWidth: "1400px",
-            margin: "40px auto",
-            padding: "0 5%",
-          }}
-        >
-          {/* Order Details */}
-          <div
-            style={{
-              backgroundColor: "var(--light-text)",
-              borderRadius: "15px",
-              padding: "30px",
-              boxShadow: "0 10px 20px var(--shadow-color)",
-            }}
-          >
-            <h2
-              style={{
-                fontSize: "1.5rem",
-                marginBottom: "20px",
-                color: "var(--primary-color)",
-              }}
-            >
-              Order Details
-            </h2>
-
-            <div style={{ marginBottom: "20px" }}>
-              <div style={{ display: "flex", marginBottom: "10px" }}>
-                <div style={{ width: "150px", fontWeight: "500" }}>Order Type:</div>
-                <div style={{ flex: 1 }}>Custom Meal</div>
-              </div>
-              <div style={{ display: "flex", marginBottom: "10px" }}>
-                <div style={{ width: "150px", fontWeight: "500" }}>Quantity:</div>
-                <div style={{ flex: 1 }}>{searchParams?.get("quantity") || 1} persons</div>
-              </div>
-            </div>
-
-            <div style={{ marginBottom: "20px" }}>
-              <h3
-                style={{
-                  fontSize: "1.2rem",
-                  color: "var(--primary-color)",
-                  marginBottom: "10px",
-                }}
-              >
-                Selected Items
-              </h3>
-              <div>
-                <p style={{ fontStyle: "italic", color: "#666" }}>
-                  Items will be displayed here based on your selection
-                </p>
-              </div>
-            </div>
-
-            <div
-              style={{
-                marginTop: "20px",
-                paddingTop: "20px",
-                borderTop: "2px solid #ddd",
-              }}
-            >
-              <div style={{ display: "flex", justifyContent: "space-between", marginBottom: "10px" }}>
-                <div style={{ fontWeight: "500" }}>Subtotal (per person):</div>
-                <div style={{ fontWeight: "600" }}>₱0.00</div>
-              </div>
-              <div style={{ display: "flex", justifyContent: "space-between", marginBottom: "10px" }}>
-                <div style={{ fontWeight: "500" }}>Subtotal:</div>
-                <div style={{ fontWeight: "600" }}>₱0.00</div>
-              </div>
-              <div
-                style={{
-                  display: "flex",
-                  justifyContent: "space-between",
-                  fontSize: "1.2rem",
-                  color: "var(--primary-color)",
-                  fontWeight: "600",
-                }}
-              >
-                <div>Total:</div>
-                <div>₱0.00</div>
-              </div>
-            </div>
-          </div>
-
-          {/* Customer Form */}
-          <div
-            style={{
-              backgroundColor: "var(--light-text)",
-              borderRadius: "15px",
-              padding: "30px",
-              boxShadow: "0 10px 20px var(--shadow-color)",
-            }}
-          >
-            <h2
-              style={{
-                fontSize: "1.5rem",
-                marginBottom: "20px",
-                color: "var(--primary-color)",
-              }}
-            >
-              Delivery Information
-            </h2>
-
-            <form onSubmit={handleSubmit}>
-              <div style={{ marginBottom: "20px" }}>
-                <label style={{ display: "block", marginBottom: "8px", fontWeight: "500" }}>Type of Event</label>
-                <select
-                  name="eventType"
-                  value={formData.eventType}
-                  onChange={handleInputChange}
-                  required
-                  style={{
-                    width: "100%",
-                    padding: "12px 15px",
-                    border: "1px solid #ddd",
-                    borderRadius: "8px",
-                    fontSize: "1rem",
-                    fontFamily: "Poppins, sans-serif",
-                    backgroundColor: "var(--light-text)",
-                    cursor: "pointer",
-                  }}
-                >
-                  <option value="">Select event type</option>
-                  <option value="corporate">Corporate Meeting</option>
-                  <option value="conference">Conference</option>
-                  <option value="seminar">Seminar</option>
-                  <option value="workshop">Workshop</option>
-                  <option value="birthday">Birthday Party</option>
-                  <option value="wedding">Wedding</option>
-                  <option value="anniversary">Anniversary</option>
-                  <option value="graduation">Graduation</option>
-                  <option value="other">Other</option>
-                </select>
-              </div>
-
-              <div style={{ marginBottom: "20px" }}>
-                <label style={{ display: "block", marginBottom: "8px", fontWeight: "500" }}>Event Date</label>
-                <input
-                  type="date"
-                  id="event-date"
-                  name="eventDate"
-                  value={formData.eventDate}
-                  onChange={handleInputChange}
-                  required
-                  style={{
-                    width: "100%",
-                    padding: "12px 15px",
-                    border: "1px solid #ddd",
-                    borderRadius: "8px",
-                    fontSize: "1rem",
-                    fontFamily: "Poppins, sans-serif",
-                  }}
-                />
-              </div>
-
-              <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "15px", marginBottom: "20px" }}>
-                <div>
-                  <label style={{ display: "block", marginBottom: "8px", fontWeight: "500" }}>Start Time</label>
-                  <input
-                    type="time"
-                    name="eventStartTime"
-                    value={formData.eventStartTime}
-                    onChange={handleInputChange}
-                    required
-                    style={{
-                      width: "100%",
-                      padding: "12px 15px",
-                      border: "1px solid #ddd",
-                      borderRadius: "8px",
-                      fontSize: "1rem",
-                      fontFamily: "Poppins, sans-serif",
-                    }}
-                  />
-                </div>
-                <div>
-                  <label style={{ display: "block", marginBottom: "8px", fontWeight: "500" }}>End Time</label>
-                  <input
-                    type="time"
-                    name="eventEndTime"
-                    value={formData.eventEndTime}
-                    onChange={handleInputChange}
-                    required
-                    style={{
-                      width: "100%",
-                      padding: "12px 15px",
-                      border: "1px solid #ddd",
-                      borderRadius: "8px",
-                      fontSize: "1rem",
-                      fontFamily: "Poppins, sans-serif",
-                    }}
-                  />
-                </div>
-              </div>
-
-              <div style={{ marginBottom: "20px" }}>
-                <label style={{ display: "block", marginBottom: "8px", fontWeight: "500" }}>Delivery Date</label>
-                <input
-                  type="date"
-                  id="delivery-date"
-                  name="deliveryDate"
-                  value={formData.deliveryDate}
-                  onChange={handleInputChange}
-                  required
-                  style={{
-                    width: "100%",
-                    padding: "12px 15px",
-                    border: "1px solid #ddd",
-                    borderRadius: "8px",
-                    fontSize: "1rem",
-                    fontFamily: "Poppins, sans-serif",
-                  }}
-                />
-              </div>
-
-              <div style={{ marginBottom: "20px" }}>
-                <label style={{ display: "block", marginBottom: "8px", fontWeight: "500" }}>Delivery Time</label>
-                <select
-                  name="deliveryTime"
-                  value={formData.deliveryTime}
-                  onChange={handleInputChange}
-                  required
-                  style={{
-                    width: "100%",
-                    padding: "12px 15px",
-                    border: "1px solid #ddd",
-                    borderRadius: "8px",
-                    fontSize: "1rem",
-                    fontFamily: "Poppins, sans-serif",
-                    backgroundColor: "var(--light-text)",
-                    cursor: "pointer",
-                  }}
-                >
-                  <option value="">Select a time</option>
-                  <option value="8:00 AM">8:00 AM</option>
-                  <option value="9:00 AM">9:00 AM</option>
-                  <option value="10:00 AM">10:00 AM</option>
-                  <option value="11:00 AM">11:00 AM</option>
-                  <option value="12:00 PM">12:00 PM</option>
-                  <option value="1:00 PM">1:00 PM</option>
-                  <option value="2:00 PM">2:00 PM</option>
-                </select>
-              </div>
-
-              <div style={{ marginBottom: "20px" }}>
-                <label style={{ display: "block", marginBottom: "8px", fontWeight: "500" }}>Delivery Address</label>
-                <textarea
-                  name="deliveryAddress"
-                  value={formData.deliveryAddress}
-                  onChange={handleInputChange}
-                  placeholder="Enter complete delivery address"
-                  required
-                  style={{
-                    width: "100%",
-                    padding: "12px 15px",
-                    border: "1px solid #ddd",
-                    borderRadius: "8px",
-                    fontSize: "1rem",
-                    fontFamily: "Poppins, sans-serif",
-                    resize: "vertical",
-                    minHeight: "100px",
-                  }}
-                />
-              </div>
-
-              <div style={{ marginBottom: "20px" }}>
-                <label style={{ display: "block", marginBottom: "8px", fontWeight: "500" }}>Contact Person</label>
-                <input
-                  type="text"
-                  name="contactPerson"
-                  value={formData.contactPerson}
-                  onChange={handleInputChange}
-                  placeholder="Name of contact person"
-                  required
-                  style={{
-                    width: "100%",
-                    padding: "12px 15px",
-                    border: "1px solid #ddd",
-                    borderRadius: "8px",
-                    fontSize: "1rem",
-                    fontFamily: "Poppins, sans-serif",
-                  }}
-                />
-              </div>
-
-              <div style={{ marginBottom: "20px" }}>
-                <label style={{ display: "block", marginBottom: "8px", fontWeight: "500" }}>Email Address</label>
-                <input
-                  type="email"
-                  name="email"
-                  value={formData.email}
-                  onChange={handleInputChange}
-                  placeholder="Enter your email"
-                  required
-                  style={{
-                    width: "100%",
-                    padding: "12px 15px",
-                    border: "1px solid #ddd",
-                    borderRadius: "8px",
-                    fontSize: "1rem",
-                    fontFamily: "Poppins, sans-serif",
-                  }}
-                />
-              </div>
-
-              <div style={{ marginBottom: "20px" }}>
-                <label style={{ display: "block", marginBottom: "8px", fontWeight: "500" }}>Contact Number</label>
-                <input
-                  type="tel"
-                  name="contactNumber"
-                  value={formData.contactNumber}
-                  onChange={handleInputChange}
-                  placeholder="Phone number"
-                  required
-                  style={{
-                    width: "100%",
-                    padding: "12px 15px",
-                    border: "1px solid #ddd",
-                    borderRadius: "8px",
-                    fontSize: "1rem",
-                    fontFamily: "Poppins, sans-serif",
-                  }}
-                />
-              </div>
-
-              <div style={{ marginBottom: "20px" }}>
-                <label style={{ display: "block", marginBottom: "8px", fontWeight: "500" }}>Payment Method</label>
-                <select
-                  name="paymentMethod"
-                  value={formData.paymentMethod}
-                  onChange={handleInputChange}
-                  required
-                  style={{
-                    width: "100%",
-                    padding: "12px 15px",
-                    border: "1px solid #ddd",
-                    borderRadius: "8px",
-                    fontSize: "1rem",
-                    fontFamily: "Poppins, sans-serif",
-                    backgroundColor: "var(--light-text)",
-                    cursor: "pointer",
-                  }}
-                >
-                  <option value="">Select payment method</option>
-                  <option value="cash">Cash on Delivery</option>
-                  <option value="bank">Bank Transfer</option>
-                  <option value="gcash">GCash</option>
-                  <option value="credit">Credit Card</option>
-                </select>
-              </div>
-
-              <div style={{ marginBottom: "20px" }}>
-                <label style={{ display: "block", marginBottom: "8px", fontWeight: "500" }}>Special Requests</label>
-                <textarea
-                  name="specialRequests"
-                  value={formData.specialRequests}
-                  onChange={handleInputChange}
-                  placeholder="Any special requests or dietary requirements"
-                  style={{
-                    width: "100%",
-                    padding: "12px 15px",
-                    border: "1px solid #ddd",
-                    borderRadius: "8px",
-                    fontSize: "1rem",
-                    fontFamily: "Poppins, sans-serif",
-                    resize: "vertical",
-                    minHeight: "100px",
-                  }}
-                />
-              </div>
-
-              <div style={{ marginTop: "30px", textAlign: "center" }}>
-                <button type="submit" className="btn btn-primary" style={{ width: "100%", padding: "12px" }}>
-                  Place Order
-                </button>
-              </div>
-            </form>
           </div>
         </section>
         <Footer />
@@ -729,31 +350,11 @@ export default function OrdersPage() {
               </div>
             ))
           ) : (
-            <div
-              style={{
-                gridColumn: "1 / -1",
-                textAlign: "center",
-                padding: "50px 20px",
-              }}
-            >
-              <div
-                style={{
-                  fontSize: "5rem",
-                  color: "#ddd",
-                  marginBottom: "20px",
-                }}
-              >
+            <div style={{ gridColumn: "1 / -1", textAlign: "center", padding: "50px 20px" }}>
+              <div style={{ fontSize: "5rem", color: "#ddd", marginBottom: "20px" }}>
                 <i className="fas fa-clipboard-list"></i>
               </div>
-              <h3
-                style={{
-                  fontSize: "1.5rem",
-                  marginBottom: "15px",
-                  color: "#666",
-                }}
-              >
-                No Orders Yet
-              </h3>
+              <h3 style={{ fontSize: "1.5rem", marginBottom: "15px", color: "#666" }}>No Orders Yet</h3>
               <p
                 style={{
                   fontSize: "1rem",
