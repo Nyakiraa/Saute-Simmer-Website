@@ -11,14 +11,16 @@ export async function GET(request: NextRequest) {
     }
 
     const supabase = createServerClient()
+
     const { data: customer, error } = await supabase.from("customers").select("*").eq("email", email).single()
 
-    if (error) {
-      if (error.code === "PGRST116") {
-        return NextResponse.json({ error: "Customer not found" }, { status: 404 })
-      }
+    if (error && error.code !== "PGRST116") {
       console.error("Error fetching customer by email:", error)
       return NextResponse.json({ error: "Failed to fetch customer" }, { status: 500 })
+    }
+
+    if (!customer) {
+      return NextResponse.json({ error: "Customer not found" }, { status: 404 })
     }
 
     return NextResponse.json(customer)
