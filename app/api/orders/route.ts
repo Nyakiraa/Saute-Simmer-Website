@@ -145,6 +145,8 @@ export async function POST(request: NextRequest) {
       payment_method: body.payment_method,
       special_requests: body.special_requests,
       status: "pending",
+      order_date: new Date().toISOString().split("T")[0],
+      items: body.selected_items ? JSON.stringify(body.selected_items) : "[]",
     }
 
     console.log("Inserting order with data:", orderData)
@@ -161,9 +163,10 @@ export async function POST(request: NextRequest) {
     // Create payment record
     const paymentData = {
       order_id: order.id,
+      customer_id: customer.id,
+      customer_name: customer.name,
       amount: totalAmount,
       payment_method: body.payment_method,
-      status: "pending",
       transaction_id: `TXN-${order.id}-${Date.now()}`,
       payment_date: new Date().toISOString(),
     }
