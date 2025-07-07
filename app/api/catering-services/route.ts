@@ -4,7 +4,7 @@ import { createServerClient } from "@/lib/supabase"
 export async function GET() {
   try {
     const supabase = createServerClient()
-    const { data: cateringServices, error } = await supabase
+    const { data: services, error } = await supabase
       .from("catering_services")
       .select(`
         *,
@@ -21,7 +21,7 @@ export async function GET() {
       return NextResponse.json({ error: "Failed to fetch catering services" }, { status: 500 })
     }
 
-    return NextResponse.json(cateringServices)
+    return NextResponse.json(services)
   } catch (error) {
     console.error("Error:", error)
     return NextResponse.json({ error: "Failed to fetch catering services" }, { status: 500 })
@@ -36,19 +36,21 @@ export async function POST(request: NextRequest) {
     // Validate required fields
     if (!body.customer_name || !body.event_type || !body.event_date || !body.guest_count || !body.location) {
       return NextResponse.json(
-        { error: "Customer name, event type, event date, guest count, and location are required" },
+        {
+          error: "Customer name, event type, event date, guest count, and location are required",
+        },
         { status: 400 },
       )
     }
 
-    const { data: cateringService, error } = await supabase.from("catering_services").insert([body]).select().single()
+    const { data: service, error } = await supabase.from("catering_services").insert([body]).select().single()
 
     if (error) {
       console.error("Error creating catering service:", error)
       return NextResponse.json({ error: "Failed to create catering service" }, { status: 500 })
     }
 
-    return NextResponse.json(cateringService, { status: 201 })
+    return NextResponse.json(service, { status: 201 })
   } catch (error) {
     console.error("Error:", error)
     return NextResponse.json({ error: "Failed to create catering service" }, { status: 500 })
