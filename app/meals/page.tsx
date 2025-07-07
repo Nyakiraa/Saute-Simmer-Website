@@ -1,71 +1,89 @@
 "use client"
+
 import { useState, useEffect } from "react"
-import Header from "../components/Header"
-import Footer from "../components/Footer"
+import Header from "../../components/Header"
+import Footer from "../../components/Footer"
+import Link from "next/link"
+import { supabase } from "@/lib/supabase-auth"
 
 interface MealSet {
   id: number
   name: string
-  type: string
+  type: "premium" | "standard" | "basic"
   price: number
   description: string
   items: any[]
-  comment: string
-}
-
-interface Item {
-  id: number
-  name: string
-  category: string
-  price: number
-  description: string
-  status: string
+  comment?: string
 }
 
 export default function MealsPage() {
   const [mealSets, setMealSets] = useState<MealSet[]>([])
-  const [items, setItems] = useState<Item[]>([])
+  const [selectedFilter, setSelectedFilter] = useState("all")
+  const [selectedMeal, setSelectedMeal] = useState<MealSet | null>(null)
+  const [isModalOpen, setIsModalOpen] = useState(false)
+  const [quantity, setQuantity] = useState(1)
   const [isLoading, setIsLoading] = useState(true)
-  const [error, setError] = useState<string | null>(null)
 
   useEffect(() => {
-    loadMealSetsAndItems()
+    loadMealSets()
   }, [])
 
-  const loadMealSetsAndItems = async () => {
+  const loadMealSets = async () => {
     try {
-      // Fetch meal sets
-      const mealSetsResponse = await fetch("/api/meal-sets")
-      if (mealSetsResponse.ok) {
-        const mealSetsData = await mealSetsResponse.json()
-        setMealSets(mealSetsData)
-      }
-
-      // Fetch items
-      const itemsResponse = await fetch("/api/items")
-      if (itemsResponse.ok) {
-        const itemsData = await itemsResponse.json()
-        setItems(itemsData)
+      const response = await fetch("/api/meal-sets")
+      if (response.ok) {
+        const data = await response.json()
+        setMealSets(data)
       }
     } catch (error) {
-      console.error("Error loading data:", error)
-      setError("Failed to load meal sets and items")
+      console.error("Error loading meal sets:", error)
     } finally {
       setIsLoading(false)
     }
   }
 
-  const groupItemsByCategory = (items: Item[]) => {
-    return items.reduce(
-      (acc, item) => {
-        if (!acc[item.category]) {
-          acc[item.category] = []
-        }
-        acc[item.category].push(item)
-        return acc
-      },
-      {} as Record<string, Item[]>,
-    )
+  const filteredMeals =
+    selectedFilter === "all"
+      ? mealSets
+      : mealSets.filter((meal) => {
+          if (selectedFilter === "premium") return meal.type === "premium"
+          if (selectedFilter === "standard") return meal.type === "standard"
+          if (selectedFilter === "basic") return meal.type === "basic"
+          return true
+        })
+
+  const openModal = (meal: MealSet) => {
+    setSelectedMeal(meal)
+    setIsModalOpen(true)
+    setQuantity(1)
+  }
+
+  const closeModal = () => {
+    setIsModalOpen(false)
+    setSelectedMeal(null)
+  }
+
+  const handleSelectSet = async (mealId: number) => {
+    // Check if user is logged in
+    try {
+      const {
+        data: { session },
+        error,
+      } = await supabase.auth.getSession()
+
+      if (error || !session) {
+        alert("Please login first to place an order.")
+        window.location.href = "/login?redirect=/meals"
+        return
+      }
+
+      // Redirect to order details page instead of orders page
+      window.location.href = `/order-details?set=${mealId}&quantity=${quantity}`
+    } catch (error) {
+      console.error("Auth check failed:", error)
+      alert("Please login first to place an order.")
+      window.location.href = "/login"
+    }
   }
 
   if (isLoading) {
@@ -80,307 +98,311 @@ export default function MealsPage() {
     )
   }
 
-  if (error) {
-    return (
-      <>
-        <Header />
-        <div style={{ textAlign: "center", padding: "100px 20px" }}>
-          <div style={{ fontSize: "2rem", marginBottom: "20px", color: "var(--danger-color)" }}>{error}</div>
-          <button onClick={loadMealSetsAndItems} className="btn btn-primary">
-            Try Again
-          </button>
-        </div>
-        <Footer />
-      </>
-    )
-  }
-
-  const groupedItems = groupItemsByCategory(items)
-
   return (
     <>
       <Header />
 
-      {/* Hero Section */}
+      {/* Page Header */}
       <section
         style={{
-          background: "linear-gradient(135deg, var(--primary-color) 0%, #8B0000 100%)",
+          background: "linear-gradient(rgba(0, 0, 0, 0.7), rgba(0, 0, 0, 0.7)), url(/images/mealsets.jpg)",
+          backgroundSize: "cover",
+          backgroundPosition: "center",
           color: "var(--light-text)",
           padding: "80px 5%",
           textAlign: "center",
         }}
       >
-        <div style={{ maxWidth: "1200px", margin: "0 auto" }}>
-          <h1 style={{ fontSize: "3rem", marginBottom: "20px", fontWeight: "700" }}>Our Meal Sets</h1>
-          <p style={{ fontSize: "1.3rem", marginBottom: "40px", opacity: "0.9" }}>
-            Carefully crafted meal combinations perfect for any occasion
+        <div style={{ maxWidth: "800px", margin: "0 auto" }}>
+          <h1 style={{ fontSize: "3rem", marginBottom: "20px" }}>Our Meal Sets</h1>
+          <p style={{ fontSize: "1.2rem", marginBottom: "0", opacity: "0.9" }}>
+            Choose from our carefully curated meal sets for your next event.
           </p>
         </div>
       </section>
 
       {/* Meal Sets Section */}
-      <section style={{ maxWidth: "1400px", margin: "60px auto", padding: "0 5%" }}>
-        <h2
-          style={{
-            fontSize: "2.5rem",
-            textAlign: "center",
-            marginBottom: "50px",
-            color: "var(--primary-color)",
-          }}
-        >
-          Choose Your Perfect Meal Set
-        </h2>
-
-        <div
-          style={{
-            display: "grid",
-            gridTemplateColumns: "repeat(auto-fit, minmax(350px, 1fr))",
-            gap: "30px",
-            marginBottom: "80px",
-          }}
-        >
-          {mealSets.map((mealSet) => (
-            <div
-              key={mealSet.id}
-              style={{
-                backgroundColor: "var(--light-text)",
-                borderRadius: "20px",
-                overflow: "hidden",
-                boxShadow: "0 15px 35px var(--shadow-color)",
-                transition: "transform 0.3s ease, box-shadow 0.3s ease",
-                cursor: "pointer",
-              }}
-              onMouseEnter={(e) => {
-                e.currentTarget.style.transform = "translateY(-10px)"
-                e.currentTarget.style.boxShadow = "0 25px 50px var(--shadow-color)"
-              }}
-              onMouseLeave={(e) => {
-                e.currentTarget.style.transform = "translateY(0)"
-                e.currentTarget.style.boxShadow = "0 15px 35px var(--shadow-color)"
-              }}
-            >
-              <div
-                style={{
-                  background: `linear-gradient(135deg, ${
-                    mealSet.type === "premium" ? "#FFD700" : mealSet.type === "standard" ? "#4CAF50" : "#2196F3"
-                  } 0%, ${
-                    mealSet.type === "premium" ? "#FFA500" : mealSet.type === "standard" ? "#45a049" : "#1976D2"
-                  } 100%)`,
-                  color: "white",
-                  padding: "30px",
-                  textAlign: "center",
-                }}
-              >
-                <h3 style={{ fontSize: "1.8rem", marginBottom: "10px", fontWeight: "600" }}>{mealSet.name}</h3>
-                <div
-                  style={{
-                    fontSize: "2.5rem",
-                    fontWeight: "700",
-                    marginBottom: "10px",
-                  }}
-                >
-                  ₱{mealSet.price.toFixed(2)}
-                </div>
-                <div
-                  style={{
-                    fontSize: "1rem",
-                    textTransform: "uppercase",
-                    letterSpacing: "1px",
-                    opacity: "0.9",
-                  }}
-                >
-                  {mealSet.type} Package
-                </div>
-              </div>
-
-              <div style={{ padding: "30px" }}>
-                <p
-                  style={{
-                    fontSize: "1rem",
-                    lineHeight: "1.6",
-                    color: "#666",
-                    marginBottom: "20px",
-                  }}
-                >
-                  {mealSet.description}
-                </p>
-
-                {mealSet.comment && (
-                  <div
-                    style={{
-                      backgroundColor: "#f8f9fa",
-                      padding: "15px",
-                      borderRadius: "10px",
-                      marginBottom: "20px",
-                      borderLeft: "4px solid var(--primary-color)",
-                    }}
-                  >
-                    <p
-                      style={{
-                        fontSize: "0.9rem",
-                        color: "#555",
-                        margin: "0",
-                        fontStyle: "italic",
-                      }}
-                    >
-                      {mealSet.comment}
-                    </p>
-                  </div>
-                )}
-
-                <button
-                  onClick={() => {
-                    window.location.href = `/order-details?mealSetId=${mealSet.id}&mealSetName=${encodeURIComponent(mealSet.name)}&price=${mealSet.price}`
-                  }}
-                  className="btn btn-primary"
-                  style={{
-                    width: "100%",
-                    padding: "15px",
-                    fontSize: "1.1rem",
-                    fontWeight: "600",
-                  }}
-                >
-                  Order This Set
-                </button>
-              </div>
-            </div>
-          ))}
-        </div>
-      </section>
-
-      {/* Individual Items Section */}
-      <section
-        style={{
-          backgroundColor: "#f8f9fa",
-          padding: "80px 5%",
-        }}
-      >
+      <section style={{ padding: "60px 5%" }}>
         <div style={{ maxWidth: "1400px", margin: "0 auto" }}>
-          <h2
-            style={{
-              fontSize: "2.5rem",
-              textAlign: "center",
-              marginBottom: "20px",
-              color: "var(--primary-color)",
-            }}
-          >
-            Individual Items
-          </h2>
-          <p
-            style={{
-              fontSize: "1.2rem",
-              textAlign: "center",
-              color: "#666",
-              marginBottom: "50px",
-            }}
-          >
-            Build your own custom meal with our individual items
-          </p>
-
-          {Object.entries(groupedItems).map(([category, categoryItems]) => (
-            <div key={category} style={{ marginBottom: "50px" }}>
-              <h3
-                style={{
-                  fontSize: "1.8rem",
-                  marginBottom: "30px",
-                  color: "var(--primary-color)",
-                  textTransform: "capitalize",
-                  borderBottom: "2px solid var(--primary-color)",
-                  paddingBottom: "10px",
-                }}
-              >
-                {category}
-              </h3>
-
+          {/* Type Filter */}
+          <div style={{ display: "flex", justifyContent: "center", marginBottom: "40px", flexWrap: "wrap" }}>
+            {[
+              { value: "all", label: "All Sets" },
+              { value: "premium", label: "Premium" },
+              { value: "standard", label: "Standard" },
+              { value: "basic", label: "Basic" },
+            ].map((filter) => (
               <div
+                key={filter.value}
+                onClick={() => setSelectedFilter(filter.value)}
                 style={{
-                  display: "grid",
-                  gridTemplateColumns: "repeat(auto-fit, minmax(280px, 1fr))",
-                  gap: "20px",
+                  padding: "10px 25px",
+                  margin: "5px 10px",
+                  backgroundColor: selectedFilter === filter.value ? "var(--primary-color)" : "var(--light-text)",
+                  color: selectedFilter === filter.value ? "var(--light-text)" : "var(--text-color)",
+                  border: "2px solid var(--primary-color)",
+                  borderRadius: "50px",
+                  fontWeight: "500",
+                  cursor: "pointer",
+                  transition: "all 0.3s ease",
                 }}
               >
-                {categoryItems.map((item) => (
-                  <div
-                    key={item.id}
-                    style={{
-                      backgroundColor: "white",
-                      borderRadius: "15px",
-                      padding: "20px",
-                      boxShadow: "0 5px 15px rgba(0,0,0,0.1)",
-                      transition: "transform 0.2s ease",
-                    }}
-                    onMouseEnter={(e) => {
-                      e.currentTarget.style.transform = "translateY(-5px)"
-                    }}
-                    onMouseLeave={(e) => {
-                      e.currentTarget.style.transform = "translateY(0)"
-                    }}
-                  >
+                {filter.label}
+              </div>
+            ))}
+          </div>
+
+          {/* Meal Sets Grid */}
+          <div
+            style={{
+              display: "grid",
+              gridTemplateColumns: "repeat(auto-fill, minmax(350px, 1fr))",
+              gap: "30px",
+            }}
+          >
+            {filteredMeals.slice(0, 3).map((meal) => (
+              <div
+                key={meal.id}
+                style={{
+                  backgroundColor: "var(--light-text)",
+                  borderRadius: "15px",
+                  overflow: "hidden",
+                  boxShadow: "0 10px 20px var(--shadow-color)",
+                  transition: "transform 0.3s ease, box-shadow 0.3s ease",
+                }}
+              >
+                {/* Meal Set Header */}
+                <div
+                  style={{
+                    background: "linear-gradient(to right, var(--primary-color), var(--primary-dark))",
+                    color: "var(--light-text)",
+                    padding: "20px",
+                    textAlign: "center",
+                  }}
+                >
+                  <h2 style={{ fontSize: "1.8rem", marginBottom: "5px" }}>{meal.name}</h2>
+                  <div style={{ fontSize: "2rem", fontWeight: "700" }}>₱{meal.price}</div>
+                  <div style={{ fontSize: "0.9rem", opacity: "0.8", textTransform: "capitalize" }}>{meal.type}</div>
+                </div>
+
+                {/* Meal Set Content */}
+                <div style={{ padding: "25px", textAlign: "center" }}>
+                  <p style={{ marginBottom: "20px", color: "#666", lineHeight: "1.6" }}>{meal.description}</p>
+
+                  {meal.comment && (
                     <div
                       style={{
-                        display: "flex",
-                        justifyContent: "space-between",
-                        alignItems: "flex-start",
-                        marginBottom: "10px",
+                        fontSize: "0.9rem",
+                        color: "var(--accent-color)",
+                        fontStyle: "italic",
+                        marginBottom: "15px",
+                        padding: "10px",
+                        backgroundColor: "#f9f9f9",
+                        borderRadius: "8px",
                       }}
                     >
-                      <h4
-                        style={{
-                          fontSize: "1.2rem",
-                          margin: "0",
-                          color: "var(--primary-color)",
-                          fontWeight: "600",
-                        }}
-                      >
-                        {item.name}
-                      </h4>
-                      <span
-                        style={{
-                          fontSize: "1.3rem",
-                          fontWeight: "700",
-                          color: "var(--primary-color)",
-                        }}
-                      >
-                        ₱{item.price.toFixed(2)}
-                      </span>
+                      {meal.comment}
                     </div>
+                  )}
+                </div>
 
-                    {item.description && (
-                      <p
-                        style={{
-                          fontSize: "0.9rem",
-                          color: "#666",
-                          margin: "0",
-                          lineHeight: "1.4",
-                        }}
-                      >
-                        {item.description}
-                      </p>
-                    )}
-                  </div>
-                ))}
+                {/* Meal Set Footer */}
+                <div
+                  style={{
+                    padding: "0 25px 25px",
+                    display: "flex",
+                    justifyContent: "center",
+                    alignItems: "center",
+                    textAlign: "center",
+                    gap: "10px",
+                  }}
+                >
+                  <button
+                    onClick={() => openModal(meal)}
+                    className="btn btn-outline"
+                    style={{ fontSize: "0.9rem", padding: "8px 16px" }}
+                  >
+                    View Details
+                  </button>
+                  <button
+                    onClick={() => handleSelectSet(meal.id)}
+                    className="btn btn-primary"
+                    style={{ fontSize: "0.9rem", padding: "8px 16px" }}
+                  >
+                    <i className="fas fa-check" style={{ marginRight: "5px" }}></i>
+                    Select This Set
+                  </button>
+                </div>
               </div>
-            </div>
-          ))}
+            ))}
+          </div>
 
-          <div style={{ textAlign: "center", marginTop: "40px" }}>
-            <button
-              onClick={() => {
-                const itemsParam = encodeURIComponent(JSON.stringify(items))
-                window.location.href = `/order-details?custom=true&items=${itemsParam}`
-              }}
-              className="btn btn-primary"
+          {/* Custom Meal CTA */}
+          <div
+            style={{
+              backgroundColor: "var(--light-text)",
+              borderRadius: "15px",
+              padding: "40px",
+              textAlign: "center",
+              marginTop: "60px",
+              boxShadow: "0 10px 20px var(--shadow-color)",
+            }}
+          >
+            <h2
               style={{
-                padding: "15px 40px",
-                fontSize: "1.2rem",
-                fontWeight: "600",
+                fontSize: "2rem",
+                marginBottom: "15px",
+                color: "var(--primary-color)",
               }}
             >
-              Create Custom Order
-            </button>
+              Create Your Own Custom Meal
+            </h2>
+            <p
+              style={{
+                maxWidth: "600px",
+                margin: "0 auto 30px",
+                color: "#666",
+                lineHeight: "1.6",
+              }}
+            >
+              Can't find exactly what you're looking for? Design your own custom meal by selecting individual items from
+              our extensive menu.
+            </p>
+            <Link href="/custom-meals" className="btn btn-primary">
+              Create Custom Meal
+            </Link>
           </div>
         </div>
       </section>
+
+      {/* Modal */}
+      {isModalOpen && selectedMeal && (
+        <div
+          style={{
+            position: "fixed",
+            top: 0,
+            left: 0,
+            width: "100%",
+            height: "100%",
+            backgroundColor: "rgba(0, 0, 0, 0.7)",
+            zIndex: 1000,
+            overflowY: "auto",
+            padding: "50px 0",
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "center",
+          }}
+          onClick={closeModal}
+        >
+          <div
+            onClick={(e) => e.stopPropagation()}
+            style={{
+              backgroundColor: "var(--light-text)",
+              maxWidth: "800px",
+              margin: "0 20px",
+              borderRadius: "15px",
+              overflow: "hidden",
+              animation: "modalFadeIn 0.3s ease",
+            }}
+          >
+            {/* Modal Header */}
+            <div
+              style={{
+                background: "linear-gradient(to right, var(--primary-color), var(--primary-dark))",
+                color: "var(--light-text)",
+                padding: "20px 30px",
+                position: "relative",
+                textAlign: "center",
+              }}
+            >
+              <h2 style={{ fontSize: "2rem", marginBottom: "5px" }}>{selectedMeal.name}</h2>
+              <div style={{ fontSize: "1.5rem", fontWeight: "600" }}>₱{selectedMeal.price}</div>
+              <button
+                onClick={closeModal}
+                style={{
+                  position: "absolute",
+                  top: "20px",
+                  right: "20px",
+                  fontSize: "1.5rem",
+                  color: "var(--light-text)",
+                  background: "none",
+                  border: "none",
+                  cursor: "pointer",
+                  transition: "transform 0.3s ease",
+                }}
+              >
+                <i className="fas fa-times"></i>
+              </button>
+            </div>
+
+            {/* Modal Body */}
+            <div style={{ padding: "30px", textAlign: "center" }}>
+              <p style={{ fontSize: "1.1rem", marginBottom: "20px", color: "#666", lineHeight: "1.6" }}>
+                {selectedMeal.description}
+              </p>
+
+              {selectedMeal.comment && (
+                <div
+                  style={{
+                    marginTop: "20px",
+                    padding: "15px",
+                    backgroundColor: "var(--secondary-color)",
+                    borderRadius: "10px",
+                    fontWeight: "600",
+                    color: "var(--primary-color)",
+                    textAlign: "center",
+                    border: "2px dashed var(--primary-color)",
+                  }}
+                >
+                  <i className="fas fa-info-circle" style={{ marginRight: "10px" }}></i>
+                  {selectedMeal.comment}
+                </div>
+              )}
+            </div>
+
+            {/* Modal Footer */}
+            <div
+              style={{
+                padding: "20px 30px",
+                backgroundColor: "#f5f5f5",
+                display: "flex",
+                justifyContent: "space-between",
+                alignItems: "center",
+                flexWrap: "wrap",
+                gap: "20px",
+              }}
+            >
+              <div style={{ display: "flex", alignItems: "center", gap: "10px" }}>
+                <label style={{ fontWeight: "500" }}>Quantity:</label>
+                <input
+                  type="number"
+                  value={quantity}
+                  onChange={(e) => setQuantity(Math.max(1, Number.parseInt(e.target.value) || 1))}
+                  min="1"
+                  max="500"
+                  style={{
+                    width: "60px",
+                    padding: "8px",
+                    border: "1px solid #ddd",
+                    borderRadius: "5px",
+                    textAlign: "center",
+                    fontFamily: "Poppins, sans-serif",
+                  }}
+                />
+              </div>
+
+              <button
+                onClick={() => handleSelectSet(selectedMeal.id)}
+                className="btn btn-primary"
+                style={{ display: "flex", alignItems: "center", gap: "5px" }}
+              >
+                <i className="fas fa-check"></i>
+                Select This Set
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       <Footer />
     </>
