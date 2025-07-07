@@ -1,7 +1,6 @@
 "use client"
 
 import type React from "react"
-
 import { useEffect, useState } from "react"
 import { supabase, checkCustomerExists, createCustomerFromOAuth } from "@/lib/supabase-auth"
 
