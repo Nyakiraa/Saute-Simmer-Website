@@ -9,7 +9,7 @@ export const signInWithGoogle = async () => {
     const { data, error } = await supabase.auth.signInWithOAuth({
       provider: "google",
       options: {
-        redirectTo: `${window.location.origin}/auth/callback?provider=google`,
+        redirectTo: `${window.location.origin}/auth/callback`,
       },
     })
 
@@ -30,7 +30,7 @@ export const signInWithFacebook = async () => {
     const { data, error } = await supabase.auth.signInWithOAuth({
       provider: "facebook",
       options: {
-        redirectTo: `${window.location.origin}/auth/callback?provider=facebook`,
+        redirectTo: `${window.location.origin}/auth/callback`,
       },
     })
 
@@ -49,20 +49,13 @@ export const signInWithFacebook = async () => {
 export const signInWithEmail = async (email: string, password: string) => {
   try {
     // First check if customer exists in our custom table
-    const customerResponse = await fetch("/api/customers/by-email", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ email }),
-    })
+    const customerExists = await checkCustomerExists(email)
 
-    if (!customerResponse.ok) {
-      throw new Error("Invalid email or password")
+    if (!customerExists) {
+      throw new Error("Account not found. Please sign up first.")
     }
 
-    const customer = await customerResponse.json()
-
-    // Verify password (in a real app, you'd hash and compare)
-    // For now, we'll use Supabase auth as password verification
+    // Use Supabase auth for password verification
     const { data, error } = await supabase.auth.signInWithPassword({
       email,
       password,
@@ -73,7 +66,7 @@ export const signInWithEmail = async (email: string, password: string) => {
       throw error
     }
 
-    return { data, customer }
+    return data
   } catch (error) {
     console.error("Email login failed:", error)
     throw error
@@ -133,6 +126,8 @@ export const createCustomerFromOAuth = async (user: any, additionalData: { phone
       address: additionalData.address,
     }
 
+    console.log("Creating customer with data:", customerData)
+
     const response = await fetch("/api/customers", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
@@ -140,10 +135,14 @@ export const createCustomerFromOAuth = async (user: any, additionalData: { phone
     })
 
     if (!response.ok) {
+      const errorText = await response.text()
+      console.error("Failed to create customer record:", errorText)
       throw new Error("Failed to create customer record")
     }
 
-    return await response.json()
+    const result = await response.json()
+    console.log("Customer created successfully:", result)
+    return result
   } catch (error) {
     console.error("Failed to create customer from OAuth:", error)
     throw error
@@ -205,15 +204,19 @@ export const getAuthState = async () => {
   }
 }
 
-export const checkCustomerExists = async (email: string) => {
+export const checkCustomerExists = async (email: string): Promise<boolean> => {
   try {
+    console.log("Checking if customer exists for email:", email)
+
     const response = await fetch("/api/customers/by-email", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ email }),
     })
 
-    return response.ok
+    const exists = response.ok
+    console.log("Customer exists:", exists)
+    return exists
   } catch (error) {
     console.error("Error checking customer:", error)
     return false
