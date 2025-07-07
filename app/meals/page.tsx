@@ -1,438 +1,388 @@
 "use client"
-
 import { useState, useEffect } from "react"
-import { supabase } from "../lib/supabase"
-import { Header } from "../components/Header"
+import Header from "../components/Header"
+import Footer from "../components/Footer"
 
 interface MealSet {
   id: number
   name: string
-  description: string
+  type: string
   price: number
-  image_url: string
-  is_available: boolean
+  description: string
+  items: any[]
+  comment: string
+}
+
+interface Item {
+  id: number
+  name: string
+  category: string
+  price: number
+  description: string
+  status: string
 }
 
 export default function MealsPage() {
   const [mealSets, setMealSets] = useState<MealSet[]>([])
-  const [loading, setLoading] = useState(true)
-  const [selectedMeal, setSelectedMeal] = useState<MealSet | null>(null)
-  const [quantity, setQuantity] = useState(1)
-  const [orderDate, setOrderDate] = useState("")
-  const [orderTime, setOrderTime] = useState("")
-  const [isOrdering, setIsOrdering] = useState(false)
+  const [items, setItems] = useState<Item[]>([])
+  const [isLoading, setIsLoading] = useState(true)
+  const [error, setError] = useState<string | null>(null)
 
   useEffect(() => {
-    fetchMealSets()
+    loadMealSetsAndItems()
   }, [])
 
-  const fetchMealSets = async () => {
+  const loadMealSetsAndItems = async () => {
     try {
-      const { data, error } = await supabase.from("meal_sets").select("*").eq("is_available", true).order("name")
+      // Fetch meal sets
+      const mealSetsResponse = await fetch("/api/meal-sets")
+      if (mealSetsResponse.ok) {
+        const mealSetsData = await mealSetsResponse.json()
+        setMealSets(mealSetsData)
+      }
 
-      if (error) throw error
-      setMealSets(data || [])
+      // Fetch items
+      const itemsResponse = await fetch("/api/items")
+      if (itemsResponse.ok) {
+        const itemsData = await itemsResponse.json()
+        setItems(itemsData)
+      }
     } catch (error) {
-      console.error("Error fetching meal sets:", error)
+      console.error("Error loading data:", error)
+      setError("Failed to load meal sets and items")
     } finally {
-      setLoading(false)
+      setIsLoading(false)
     }
   }
 
-  const handleOrderMeal = async () => {
-    if (!selectedMeal) return
-
-    setIsOrdering(true)
-    try {
-      // Get current user session
-      const {
-        data: { session },
-      } = await supabase.auth.getSession()
-
-      if (!session) {
-        alert("Please log in to place an order")
-        window.location.href = "/login"
-        return
-      }
-
-      // Get customer info
-      const { data: customer } = await supabase.from("customers").select("id").eq("email", session.user.email).single()
-
-      if (!customer) {
-        alert("Customer profile not found. Please complete your profile.")
-        return
-      }
-
-      const orderData = {
-        customer_id: customer.id,
-        meal_set_id: selectedMeal.id,
-        quantity: quantity,
-        total_amount: selectedMeal.price * quantity,
-        order_date: orderDate,
-        order_time: orderTime,
-        status: "pending",
-      }
-
-      const response = await fetch("/api/meal-set-orders", {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify(orderData),
-      })
-
-      if (response.ok) {
-        alert("Order placed successfully!")
-        setSelectedMeal(null)
-        setQuantity(1)
-        setOrderDate("")
-        setOrderTime("")
-      } else {
-        const error = await response.json()
-        alert(`Failed to place order: ${error.error}`)
-      }
-    } catch (error) {
-      console.error("Error placing order:", error)
-      alert("Failed to place order. Please try again.")
-    } finally {
-      setIsOrdering(false)
-    }
-  }
-
-  if (loading) {
-    return (
-      <div style={{ fontFamily: "Poppins, sans-serif" }}>
-        <Header />
-        <div
-          style={{
-            display: "flex",
-            justifyContent: "center",
-            alignItems: "center",
-            height: "50vh",
-          }}
-        >
-          <div style={{ textAlign: "center" }}>
-            <div
-              style={{
-                width: "40px",
-                height: "40px",
-                border: "3px solid #f3f3f3",
-                borderTop: "3px solid #d32f2f",
-                borderRadius: "50%",
-                animation: "spin 1s linear infinite",
-                margin: "0 auto 20px",
-              }}
-            ></div>
-            <p>Loading meal sets...</p>
-          </div>
-        </div>
-      </div>
+  const groupItemsByCategory = (items: Item[]) => {
+    return items.reduce(
+      (acc, item) => {
+        if (!acc[item.category]) {
+          acc[item.category] = []
+        }
+        acc[item.category].push(item)
+        return acc
+      },
+      {} as Record<string, Item[]>,
     )
   }
 
+  if (isLoading) {
+    return (
+      <>
+        <Header />
+        <div style={{ textAlign: "center", padding: "100px 20px" }}>
+          <div style={{ fontSize: "2rem", marginBottom: "20px" }}>Loading meal sets...</div>
+        </div>
+        <Footer />
+      </>
+    )
+  }
+
+  if (error) {
+    return (
+      <>
+        <Header />
+        <div style={{ textAlign: "center", padding: "100px 20px" }}>
+          <div style={{ fontSize: "2rem", marginBottom: "20px", color: "var(--danger-color)" }}>{error}</div>
+          <button onClick={loadMealSetsAndItems} className="btn btn-primary">
+            Try Again
+          </button>
+        </div>
+        <Footer />
+      </>
+    )
+  }
+
+  const groupedItems = groupItemsByCategory(items)
+
   return (
-    <div style={{ fontFamily: "Poppins, sans-serif", minHeight: "100vh", backgroundColor: "#f5f5f5" }}>
+    <>
       <Header />
 
-      <div style={{ padding: "40px 20px" }}>
+      {/* Hero Section */}
+      <section
+        style={{
+          background: "linear-gradient(135deg, var(--primary-color) 0%, #8B0000 100%)",
+          color: "var(--light-text)",
+          padding: "80px 5%",
+          textAlign: "center",
+        }}
+      >
         <div style={{ maxWidth: "1200px", margin: "0 auto" }}>
-          <h1
-            style={{
-              textAlign: "center",
-              color: "#d32f2f",
-              marginBottom: "40px",
-              fontSize: "2.5rem",
-              fontWeight: "600",
-            }}
-          >
-            Our Meal Sets
-          </h1>
-
-          <div
-            style={{
-              display: "grid",
-              gridTemplateColumns: "repeat(auto-fit, minmax(300px, 1fr))",
-              gap: "30px",
-            }}
-          >
-            {mealSets.map((meal) => (
-              <div
-                key={meal.id}
-                style={{
-                  backgroundColor: "white",
-                  borderRadius: "15px",
-                  overflow: "hidden",
-                  boxShadow: "0 5px 15px rgba(0, 0, 0, 0.1)",
-                  transition: "transform 0.3s ease, box-shadow 0.3s ease",
-                  cursor: "pointer",
-                }}
-                onMouseEnter={(e) => {
-                  e.currentTarget.style.transform = "translateY(-5px)"
-                  e.currentTarget.style.boxShadow = "0 10px 25px rgba(0, 0, 0, 0.15)"
-                }}
-                onMouseLeave={(e) => {
-                  e.currentTarget.style.transform = "translateY(0)"
-                  e.currentTarget.style.boxShadow = "0 5px 15px rgba(0, 0, 0, 0.1)"
-                }}
-                onClick={() => setSelectedMeal(meal)}
-              >
-                <div
-                  style={{
-                    height: "200px",
-                    backgroundColor: "#f0f0f0",
-                    display: "flex",
-                    alignItems: "center",
-                    justifyContent: "center",
-                    color: "#666",
-                  }}
-                >
-                  {meal.image_url ? (
-                    <img
-                      src={meal.image_url || "/placeholder.svg"}
-                      alt={meal.name}
-                      style={{ width: "100%", height: "100%", objectFit: "cover" }}
-                    />
-                  ) : (
-                    <span>No Image Available</span>
-                  )}
-                </div>
-
-                <div style={{ padding: "20px" }}>
-                  <h3
-                    style={{
-                      color: "#333",
-                      marginBottom: "10px",
-                      fontSize: "1.3rem",
-                      fontWeight: "600",
-                    }}
-                  >
-                    {meal.name}
-                  </h3>
-
-                  <p
-                    style={{
-                      color: "#666",
-                      marginBottom: "15px",
-                      lineHeight: "1.5",
-                    }}
-                  >
-                    {meal.description}
-                  </p>
-
-                  <div
-                    style={{
-                      display: "flex",
-                      justifyContent: "space-between",
-                      alignItems: "center",
-                    }}
-                  >
-                    <span
-                      style={{
-                        fontSize: "1.5rem",
-                        fontWeight: "bold",
-                        color: "#d32f2f",
-                      }}
-                    >
-                      ₱{meal.price.toFixed(2)}
-                    </span>
-
-                    <button
-                      onClick={(e) => {
-                        e.stopPropagation()
-                        setSelectedMeal(meal)
-                      }}
-                      style={{
-                        background: "linear-gradient(to right, #d32f2f, #b71c1c)",
-                        color: "white",
-                        border: "none",
-                        padding: "10px 20px",
-                        borderRadius: "25px",
-                        cursor: "pointer",
-                        fontWeight: "500",
-                        transition: "transform 0.2s ease",
-                      }}
-                      onMouseEnter={(e) => {
-                        e.currentTarget.style.transform = "scale(1.05)"
-                      }}
-                      onMouseLeave={(e) => {
-                        e.currentTarget.style.transform = "scale(1)"
-                      }}
-                    >
-                      Order Now
-                    </button>
-                  </div>
-                </div>
-              </div>
-            ))}
-          </div>
+          <h1 style={{ fontSize: "3rem", marginBottom: "20px", fontWeight: "700" }}>Our Meal Sets</h1>
+          <p style={{ fontSize: "1.3rem", marginBottom: "40px", opacity: "0.9" }}>
+            Carefully crafted meal combinations perfect for any occasion
+          </p>
         </div>
-      </div>
+      </section>
 
-      {/* Order Modal */}
-      {selectedMeal && (
-        <div
+      {/* Meal Sets Section */}
+      <section style={{ maxWidth: "1400px", margin: "60px auto", padding: "0 5%" }}>
+        <h2
           style={{
-            position: "fixed",
-            top: 0,
-            left: 0,
-            right: 0,
-            bottom: 0,
-            backgroundColor: "rgba(0, 0, 0, 0.5)",
-            display: "flex",
-            justifyContent: "center",
-            alignItems: "center",
-            zIndex: 1000,
-            padding: "20px",
+            fontSize: "2.5rem",
+            textAlign: "center",
+            marginBottom: "50px",
+            color: "var(--primary-color)",
           }}
         >
-          <div
-            style={{
-              backgroundColor: "white",
-              borderRadius: "15px",
-              padding: "30px",
-              maxWidth: "500px",
-              width: "100%",
-              maxHeight: "90vh",
-              overflowY: "auto",
-            }}
-          >
+          Choose Your Perfect Meal Set
+        </h2>
+
+        <div
+          style={{
+            display: "grid",
+            gridTemplateColumns: "repeat(auto-fit, minmax(350px, 1fr))",
+            gap: "30px",
+            marginBottom: "80px",
+          }}
+        >
+          {mealSets.map((mealSet) => (
             <div
-              style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "20px" }}
-            >
-              <h2 style={{ color: "#d32f2f", margin: 0 }}>Order {selectedMeal.name}</h2>
-              <button
-                onClick={() => setSelectedMeal(null)}
-                style={{
-                  background: "none",
-                  border: "none",
-                  fontSize: "24px",
-                  cursor: "pointer",
-                  color: "#666",
-                }}
-              >
-                ×
-              </button>
-            </div>
-
-            <div style={{ marginBottom: "20px" }}>
-              <p style={{ color: "#666", marginBottom: "10px" }}>{selectedMeal.description}</p>
-              <p style={{ fontSize: "1.3rem", fontWeight: "bold", color: "#d32f2f" }}>
-                ₱{selectedMeal.price.toFixed(2)} per serving
-              </p>
-            </div>
-
-            <div style={{ marginBottom: "20px" }}>
-              <label style={{ display: "block", marginBottom: "8px", fontWeight: "500" }}>Quantity</label>
-              <input
-                type="number"
-                min="1"
-                value={quantity}
-                onChange={(e) => setQuantity(Number.parseInt(e.target.value) || 1)}
-                style={{
-                  width: "100%",
-                  padding: "10px",
-                  border: "1px solid #ddd",
-                  borderRadius: "8px",
-                  fontSize: "1rem",
-                }}
-              />
-            </div>
-
-            <div style={{ marginBottom: "20px" }}>
-              <label style={{ display: "block", marginBottom: "8px", fontWeight: "500" }}>Preferred Date</label>
-              <input
-                type="date"
-                value={orderDate}
-                onChange={(e) => setOrderDate(e.target.value)}
-                min={new Date().toISOString().split("T")[0]}
-                required
-                style={{
-                  width: "100%",
-                  padding: "10px",
-                  border: "1px solid #ddd",
-                  borderRadius: "8px",
-                  fontSize: "1rem",
-                }}
-              />
-            </div>
-
-            <div style={{ marginBottom: "20px" }}>
-              <label style={{ display: "block", marginBottom: "8px", fontWeight: "500" }}>Preferred Time</label>
-              <input
-                type="time"
-                value={orderTime}
-                onChange={(e) => setOrderTime(e.target.value)}
-                required
-                style={{
-                  width: "100%",
-                  padding: "10px",
-                  border: "1px solid #ddd",
-                  borderRadius: "8px",
-                  fontSize: "1rem",
-                }}
-              />
-            </div>
-
-            <div
+              key={mealSet.id}
               style={{
-                padding: "15px",
-                backgroundColor: "#f9f9f9",
-                borderRadius: "8px",
-                marginBottom: "20px",
+                backgroundColor: "var(--light-text)",
+                borderRadius: "20px",
+                overflow: "hidden",
+                boxShadow: "0 15px 35px var(--shadow-color)",
+                transition: "transform 0.3s ease, box-shadow 0.3s ease",
+                cursor: "pointer",
+              }}
+              onMouseEnter={(e) => {
+                e.currentTarget.style.transform = "translateY(-10px)"
+                e.currentTarget.style.boxShadow = "0 25px 50px var(--shadow-color)"
+              }}
+              onMouseLeave={(e) => {
+                e.currentTarget.style.transform = "translateY(0)"
+                e.currentTarget.style.boxShadow = "0 15px 35px var(--shadow-color)"
               }}
             >
-              <div style={{ display: "flex", justifyContent: "space-between", marginBottom: "5px" }}>
-                <span>Subtotal:</span>
-                <span>₱{(selectedMeal.price * quantity).toFixed(2)}</span>
-              </div>
-              <div style={{ display: "flex", justifyContent: "space-between", fontWeight: "bold", fontSize: "1.1rem" }}>
-                <span>Total:</span>
-                <span style={{ color: "#d32f2f" }}>₱{(selectedMeal.price * quantity).toFixed(2)}</span>
-              </div>
-            </div>
-
-            <div style={{ display: "flex", gap: "10px" }}>
-              <button
-                onClick={() => setSelectedMeal(null)}
+              <div
                 style={{
-                  flex: 1,
-                  padding: "12px",
-                  border: "1px solid #ddd",
-                  backgroundColor: "white",
-                  borderRadius: "8px",
-                  cursor: "pointer",
-                  fontWeight: "500",
-                }}
-              >
-                Cancel
-              </button>
-              <button
-                onClick={handleOrderMeal}
-                disabled={isOrdering || !orderDate || !orderTime}
-                style={{
-                  flex: 2,
-                  padding: "12px",
-                  background: isOrdering ? "#ccc" : "linear-gradient(to right, #d32f2f, #b71c1c)",
+                  background: `linear-gradient(135deg, ${
+                    mealSet.type === "premium" ? "#FFD700" : mealSet.type === "standard" ? "#4CAF50" : "#2196F3"
+                  } 0%, ${
+                    mealSet.type === "premium" ? "#FFA500" : mealSet.type === "standard" ? "#45a049" : "#1976D2"
+                  } 100%)`,
                   color: "white",
-                  border: "none",
-                  borderRadius: "8px",
-                  cursor: isOrdering ? "not-allowed" : "pointer",
-                  fontWeight: "500",
+                  padding: "30px",
+                  textAlign: "center",
                 }}
               >
-                {isOrdering ? "Placing Order..." : "Place Order"}
-              </button>
+                <h3 style={{ fontSize: "1.8rem", marginBottom: "10px", fontWeight: "600" }}>{mealSet.name}</h3>
+                <div
+                  style={{
+                    fontSize: "2.5rem",
+                    fontWeight: "700",
+                    marginBottom: "10px",
+                  }}
+                >
+                  ₱{mealSet.price.toFixed(2)}
+                </div>
+                <div
+                  style={{
+                    fontSize: "1rem",
+                    textTransform: "uppercase",
+                    letterSpacing: "1px",
+                    opacity: "0.9",
+                  }}
+                >
+                  {mealSet.type} Package
+                </div>
+              </div>
+
+              <div style={{ padding: "30px" }}>
+                <p
+                  style={{
+                    fontSize: "1rem",
+                    lineHeight: "1.6",
+                    color: "#666",
+                    marginBottom: "20px",
+                  }}
+                >
+                  {mealSet.description}
+                </p>
+
+                {mealSet.comment && (
+                  <div
+                    style={{
+                      backgroundColor: "#f8f9fa",
+                      padding: "15px",
+                      borderRadius: "10px",
+                      marginBottom: "20px",
+                      borderLeft: "4px solid var(--primary-color)",
+                    }}
+                  >
+                    <p
+                      style={{
+                        fontSize: "0.9rem",
+                        color: "#555",
+                        margin: "0",
+                        fontStyle: "italic",
+                      }}
+                    >
+                      {mealSet.comment}
+                    </p>
+                  </div>
+                )}
+
+                <button
+                  onClick={() => {
+                    window.location.href = `/order-details?mealSetId=${mealSet.id}&mealSetName=${encodeURIComponent(mealSet.name)}&price=${mealSet.price}`
+                  }}
+                  className="btn btn-primary"
+                  style={{
+                    width: "100%",
+                    padding: "15px",
+                    fontSize: "1.1rem",
+                    fontWeight: "600",
+                  }}
+                >
+                  Order This Set
+                </button>
+              </div>
             </div>
+          ))}
+        </div>
+      </section>
+
+      {/* Individual Items Section */}
+      <section
+        style={{
+          backgroundColor: "#f8f9fa",
+          padding: "80px 5%",
+        }}
+      >
+        <div style={{ maxWidth: "1400px", margin: "0 auto" }}>
+          <h2
+            style={{
+              fontSize: "2.5rem",
+              textAlign: "center",
+              marginBottom: "20px",
+              color: "var(--primary-color)",
+            }}
+          >
+            Individual Items
+          </h2>
+          <p
+            style={{
+              fontSize: "1.2rem",
+              textAlign: "center",
+              color: "#666",
+              marginBottom: "50px",
+            }}
+          >
+            Build your own custom meal with our individual items
+          </p>
+
+          {Object.entries(groupedItems).map(([category, categoryItems]) => (
+            <div key={category} style={{ marginBottom: "50px" }}>
+              <h3
+                style={{
+                  fontSize: "1.8rem",
+                  marginBottom: "30px",
+                  color: "var(--primary-color)",
+                  textTransform: "capitalize",
+                  borderBottom: "2px solid var(--primary-color)",
+                  paddingBottom: "10px",
+                }}
+              >
+                {category}
+              </h3>
+
+              <div
+                style={{
+                  display: "grid",
+                  gridTemplateColumns: "repeat(auto-fit, minmax(280px, 1fr))",
+                  gap: "20px",
+                }}
+              >
+                {categoryItems.map((item) => (
+                  <div
+                    key={item.id}
+                    style={{
+                      backgroundColor: "white",
+                      borderRadius: "15px",
+                      padding: "20px",
+                      boxShadow: "0 5px 15px rgba(0,0,0,0.1)",
+                      transition: "transform 0.2s ease",
+                    }}
+                    onMouseEnter={(e) => {
+                      e.currentTarget.style.transform = "translateY(-5px)"
+                    }}
+                    onMouseLeave={(e) => {
+                      e.currentTarget.style.transform = "translateY(0)"
+                    }}
+                  >
+                    <div
+                      style={{
+                        display: "flex",
+                        justifyContent: "space-between",
+                        alignItems: "flex-start",
+                        marginBottom: "10px",
+                      }}
+                    >
+                      <h4
+                        style={{
+                          fontSize: "1.2rem",
+                          margin: "0",
+                          color: "var(--primary-color)",
+                          fontWeight: "600",
+                        }}
+                      >
+                        {item.name}
+                      </h4>
+                      <span
+                        style={{
+                          fontSize: "1.3rem",
+                          fontWeight: "700",
+                          color: "var(--primary-color)",
+                        }}
+                      >
+                        ₱{item.price.toFixed(2)}
+                      </span>
+                    </div>
+
+                    {item.description && (
+                      <p
+                        style={{
+                          fontSize: "0.9rem",
+                          color: "#666",
+                          margin: "0",
+                          lineHeight: "1.4",
+                        }}
+                      >
+                        {item.description}
+                      </p>
+                    )}
+                  </div>
+                ))}
+              </div>
+            </div>
+          ))}
+
+          <div style={{ textAlign: "center", marginTop: "40px" }}>
+            <button
+              onClick={() => {
+                const itemsParam = encodeURIComponent(JSON.stringify(items))
+                window.location.href = `/order-details?custom=true&items=${itemsParam}`
+              }}
+              className="btn btn-primary"
+              style={{
+                padding: "15px 40px",
+                fontSize: "1.2rem",
+                fontWeight: "600",
+              }}
+            >
+              Create Custom Order
+            </button>
           </div>
         </div>
-      )}
+      </section>
 
-      <style jsx>{`
-        @keyframes spin {
-          0% { transform: rotate(0deg); }
-          100% { transform: rotate(360deg); }
-        }
-      `}</style>
-    </div>
+      <Footer />
+    </>
   )
 }
