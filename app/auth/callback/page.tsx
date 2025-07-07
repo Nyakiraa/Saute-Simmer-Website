@@ -16,6 +16,7 @@ export default function AuthCallback() {
   useEffect(() => {
     const handleAuthCallback = async () => {
       try {
+        // Handle the OAuth callback
         const { data, error } = await supabase.auth.getSession()
 
         if (error) {
@@ -28,19 +29,25 @@ export default function AuthCallback() {
           const user = data.session.user
           setUser(user)
 
+          console.log("User authenticated:", user.email)
+
           // Check if customer exists in our custom table
           const customerExists = await checkCustomerExists(user.email || "")
+          console.log("Customer exists:", customerExists)
 
           if (!customerExists) {
             // New OAuth user needs to complete profile
+            console.log("New user - showing profile completion form")
             setNeedsProfile(true)
             setIsLoading(false)
             return
           }
 
           // Customer exists, proceed with redirect
+          console.log("Existing user - redirecting")
           redirectUser(user)
         } else {
+          console.log("No session found - redirecting to login")
           window.location.href = "/login"
         }
       } catch (error) {
@@ -72,7 +79,9 @@ export default function AuthCallback() {
     setIsLoading(true)
 
     try {
+      console.log("Creating customer profile for:", user.email)
       await createCustomerFromOAuth(user, formData)
+      console.log("Profile created successfully")
       redirectUser(user)
     } catch (error) {
       console.error("Profile completion failed:", error)
