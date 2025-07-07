@@ -1,8 +1,8 @@
 "use client"
 
 import { useState, useEffect } from "react"
-import { supabase } from "@/lib/supabase"
-import { Header } from "@/components/Header"
+import { supabase } from "../../lib/supabase"
+import { Header } from "../../components/Header"
 
 interface MealSet {
   id: number
