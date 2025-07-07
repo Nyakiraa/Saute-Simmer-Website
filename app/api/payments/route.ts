@@ -6,14 +6,7 @@ export async function GET() {
     const supabase = createServerClient()
     const { data: payments, error } = await supabase
       .from("payments")
-      .select(`
-        *,
-        customers (
-          name,
-          email,
-          phone
-        )
-      `)
+      .select("*")
       .order("created_at", { ascending: false })
 
     if (error) {
@@ -32,11 +25,6 @@ export async function POST(request: NextRequest) {
   try {
     const supabase = createServerClient()
     const body = await request.json()
-
-    // Validate required fields
-    if (!body.customer_name || !body.amount || !body.payment_method) {
-      return NextResponse.json({ error: "Customer name, amount, and payment method are required" }, { status: 400 })
-    }
 
     const { data: payment, error } = await supabase.from("payments").insert([body]).select().single()
 
