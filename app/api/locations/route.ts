@@ -7,8 +7,7 @@ export async function GET() {
     const { data: locations, error } = await supabase
       .from("locations")
       .select("*")
-      .eq("status", "active")
-      .order("name", { ascending: true })
+      .order("created_at", { ascending: false })
 
     if (error) {
       console.error("Error fetching locations:", error)
@@ -26,11 +25,6 @@ export async function POST(request: NextRequest) {
   try {
     const supabase = createServerClient()
     const body = await request.json()
-
-    // Validate required fields
-    if (!body.name || !body.address || !body.city) {
-      return NextResponse.json({ error: "Name, address, and city are required" }, { status: 400 })
-    }
 
     const { data: location, error } = await supabase.from("locations").insert([body]).select().single()
 
