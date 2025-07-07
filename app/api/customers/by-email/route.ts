@@ -1,31 +1,33 @@
 import { type NextRequest, NextResponse } from "next/server"
-import { createServerClient } from "@/lib/supabase"
+import { createClient } from "@supabase/supabase-js"
 
-export async function GET(request: NextRequest) {
+const supabase = createClient(process.env.NEXT_PUBLIC_SUPABASE_URL!, process.env.SUPABASE_SERVICE_ROLE_KEY!)
+
+export async function POST(request: NextRequest) {
   try {
-    const { searchParams } = new URL(request.url)
-    const email = searchParams.get("email")
+    const { email } = await request.json()
 
     if (!email) {
-      return NextResponse.json({ error: "Email parameter is required" }, { status: 400 })
+      return NextResponse.json({ error: "Email is required" }, { status: 400 })
     }
 
-    const supabase = createServerClient()
+    console.log("Looking for customer with email:", email)
 
-    const { data: customer, error } = await supabase.from("customers").select("*").eq("email", email).single()
+    const { data, error } = await supabase
+      .from("customers")
+      .select("id, name, email, phone, address")
+      .eq("email", email)
+      .single()
 
-    if (error && error.code !== "PGRST116") {
-      console.error("Error fetching customer by email:", error)
-      return NextResponse.json({ error: "Failed to fetch customer" }, { status: 500 })
-    }
-
-    if (!customer) {
+    if (error) {
+      console.log("Customer not found:", error.message)
       return NextResponse.json({ error: "Customer not found" }, { status: 404 })
     }
 
-    return NextResponse.json(customer)
+    console.log("Customer found:", data)
+    return NextResponse.json(data)
   } catch (error) {
-    console.error("Error:", error)
-    return NextResponse.json({ error: "Failed to fetch customer" }, { status: 500 })
+    console.error("Error finding customer by email:", error)
+    return NextResponse.json({ error: "Internal server error" }, { status: 500 })
   }
 }
