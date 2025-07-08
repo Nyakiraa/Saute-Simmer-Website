@@ -114,7 +114,8 @@ export default function MealsPage() {
         }}
       >
         <div style={{ maxWidth: "800px", margin: "0 auto" }}>
-          <h1 style={{ fontSize: "3rem", marginBottom: "20px" }}>Our Meal Sets</h1>
+          <h1 style={{ fontSize: "3rem", marginBottom: "20px",fontFamily: "'Cinzel Decorative', serif",
+                    fontWeight: "700" }}>Our Meal Sets</h1>
           <p style={{ fontSize: "1.2rem", marginBottom: "0", opacity: "0.9" }}>
             Choose from our carefully curated meal sets for your next event.
           </p>
