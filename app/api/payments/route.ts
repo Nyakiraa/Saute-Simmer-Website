@@ -7,17 +7,7 @@ export async function GET() {
 
     const { data: payments, error } = await supabase
       .from("payments")
-      .select(`
-        *,
-        orders (
-          id,
-          total_amount,
-          customers (
-            name,
-            email
-          )
-        )
-      `)
+      .select("*")
       .order("created_at", { ascending: false })
 
     if (error) {
@@ -25,16 +15,7 @@ export async function GET() {
       return NextResponse.json({ error: "Failed to fetch payments" }, { status: 500 })
     }
 
-    // Transform the data to flatten the relationships
-    const transformedPayments =
-      payments?.map((payment) => ({
-        ...payment,
-        customer_name: payment.orders?.customers?.name || "Unknown Customer",
-        customer_email: payment.orders?.customers?.email || "",
-        order_total: payment.orders?.total_amount || 0,
-      })) || []
-
-    return NextResponse.json(transformedPayments)
+    return NextResponse.json(payments || [])
   } catch (error) {
     console.error("Server error:", error)
     return NextResponse.json({ error: "Internal server error" }, { status: 500 })
@@ -47,38 +28,26 @@ export async function POST(request: NextRequest) {
     const supabase = createServerClient()
 
     // Validate required fields
-    const { customer_id, amount, payment_method } = body
+    const { customer_name, amount } = body
 
-    if (!customer_id || !amount || !payment_method) {
-      return NextResponse.json(
-        { error: "Missing required fields: customer_id, amount, payment_method" },
-        { status: 400 },
-      )
+    if (!customer_name || !amount) {
+      return NextResponse.json({ error: "Missing required fields: customer_name, amount" }, { status: 400 })
     }
 
     // Insert the payment
     const { data: payment, error: paymentError } = await supabase
       .from("payments")
       .insert({
-        customer_id,
-        order_id: body.order_id || null,
+        customer_id: body.customer_id || null,
+        customer_name,
         amount,
-        payment_method,
+        transaction_id: body.transaction_id || null,
+        payment_date: body.payment_date || new Date().toISOString(),
+        order_id: body.order_id || null,
+        payment_method: body.payment_method || null,
         status: body.status || "pending",
-        payment_date: body.payment_date || new Date().toISOString().split("T")[0],
-        notes: body.notes || null,
       })
-      .select(`
-        *,
-        orders (
-          id,
-          total_amount,
-          customers (
-            name,
-            email
-          )
-        )
-      `)
+      .select()
       .single()
 
     if (paymentError) {
@@ -86,15 +55,7 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: "Failed to create payment" }, { status: 500 })
     }
 
-    // Transform the response
-    const transformedPayment = {
-      ...payment,
-      customer_name: payment.orders?.customers?.name || "Unknown Customer",
-      customer_email: payment.orders?.customers?.email || "",
-      order_total: payment.orders?.total_amount || 0,
-    }
-
-    return NextResponse.json(transformedPayment, { status: 201 })
+    return NextResponse.json(payment, { status: 201 })
   } catch (error) {
     console.error("Server error:", error)
     return NextResponse.json({ error: "Internal server error" }, { status: 500 })
