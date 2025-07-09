@@ -1,22 +1,154 @@
-// lib/supabase.ts
+import { createClient } from "@supabase/supabase-js"
 
-import { createClient } from "@supabase/supabase-js";
-import { SUPABASE_CONFIG } from "./config";
+const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!
+const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
+const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY!
 
-// Client for browser-side usage
-export const supabase = createClient(SUPABASE_CONFIG.url, SUPABASE_CONFIG.anonKey);
+export const supabase = createClient(supabaseUrl, supabaseAnonKey)
 
-// Server-side client for API routes
+// Server-side client with service role key for admin operations
 export const createServerClient = () => {
-  // Use service role key if available, otherwise use anon key
-  const key = SUPABASE_CONFIG.serviceRoleKey || SUPABASE_CONFIG.anonKey;
-  return createClient(SUPABASE_CONFIG.url, key);
-};
+  return createClient(supabaseUrl, supabaseServiceKey, {
+    auth: {
+      autoRefreshToken: false,
+      persistSession: false,
+    },
+  })
+}
 
-// Helper function to check if Supabase is properly configured
-export const isSupabaseConfigured = () => {
-  return (
-    SUPABASE_CONFIG.url !== "https://arnbjoduiznhdffauyod.supabase.co" &&
-    SUPABASE_CONFIG.anonKey !== "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImFybmJqb2R1aXpuaGRmZmF1eW9kIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTE1NDcwNjksImV4cCI6MjA2NzEyMzA2OX0.2oQaSKDI8Wz24gNwMlUjlff1ep8fdIChEY2qzehMtL0"
-  );
-};
+// Client-side browser client
+export const createBrowserClient = () => {
+  return createClient(supabaseUrl, supabaseAnonKey)
+}
+
+// Database helper functions
+export const getCustomers = async () => {
+  const { data, error } = await supabase.from("customers").select("*").order("created_at", { ascending: false })
+
+  if (error) {
+    console.error("Error fetching customers:", error)
+    return []
+  }
+
+  return data || []
+}
+
+export const getItems = async () => {
+  const { data, error } = await supabase
+    .from("items")
+    .select("*")
+    .eq("status", "available")
+    .order("category", { ascending: true })
+    .order("name", { ascending: true })
+
+  if (error) {
+    console.error("Error fetching items:", error)
+    return []
+  }
+
+  return data || []
+}
+
+export const getMealSets = async () => {
+  const { data, error } = await supabase
+    .from("meal_sets")
+    .select(`
+      *,
+      meal_set_items (
+        meal_time,
+        items (
+          id,
+          name,
+          category,
+          price,
+          description
+        )
+      )
+    `)
+    .order("type", { ascending: false })
+    .order("price", { ascending: true })
+
+  if (error) {
+    console.error("Error fetching meal sets:", error)
+    return []
+  }
+
+  return data || []
+}
+
+export const getCateringServices = async () => {
+  const { data, error } = await supabase
+    .from("catering_services")
+    .select("*")
+    .order("price_per_person", { ascending: true })
+
+  if (error) {
+    console.error("Error fetching catering services:", error)
+    return []
+  }
+
+  return data || []
+}
+
+export const getLocations = async () => {
+  const { data, error } = await supabase.from("locations").select("*").order("name", { ascending: true })
+
+  if (error) {
+    console.error("Error fetching locations:", error)
+    return []
+  }
+
+  return data || []
+}
+
+export const getOrders = async () => {
+  const { data, error } = await supabase
+    .from("orders")
+    .select(`
+      *,
+      customers (
+        id,
+        name,
+        email,
+        phone
+      ),
+      meal_sets (
+        id,
+        name,
+        price,
+        type
+      )
+    `)
+    .order("created_at", { ascending: false })
+
+  if (error) {
+    console.error("Error fetching orders:", error)
+    return []
+  }
+
+  return data || []
+}
+
+export const getPayments = async () => {
+  const { data, error } = await supabase
+    .from("payments")
+    .select(`
+      *,
+      orders (
+        id,
+        total_amount,
+        customers (
+          name,
+          email
+        )
+      )
+    `)
+    .order("created_at", { ascending: false })
+
+  if (error) {
+    console.error("Error fetching payments:", error)
+    return []
+  }
+
+  return data || []
+}
