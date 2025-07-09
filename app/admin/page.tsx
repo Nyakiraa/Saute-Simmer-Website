@@ -355,24 +355,43 @@ function AdminDashboard() {
       )
     }
 
-    // Handle object format
+    // Handle object format - extract item names only
     if (typeof items === "object" && items !== null) {
+      // Check if it's a single item object with name property
+      if (items.name) {
+        return (
+          <div className="p-2 bg-gray-50 rounded">
+            <span className="font-medium">{items.name}</span>
+            {items.category && <span className="text-sm text-gray-500 ml-2">({items.category})</span>}
+          </div>
+        )
+      }
+
+      // Handle multiple items as object entries
       const itemEntries = Object.entries(items)
       if (itemEntries.length === 0) return <span className="text-gray-500">No items selected</span>
 
       return (
         <div className="space-y-2">
-          {itemEntries.map(([key, value], index) => (
-            <div key={index} className="flex justify-between items-center p-2 bg-gray-50 rounded">
-              <div>
+          {itemEntries.map(([key, value], index) => {
+            // If value is an object with name property, use that
+            if (typeof value === "object" && value !== null && (value as any).name) {
+              return (
+                <div key={index} className="p-2 bg-gray-50 rounded">
+                  <span className="font-medium">{(value as any).name}</span>
+                  {(value as any).category && (
+                    <span className="text-sm text-gray-500 ml-2">({(value as any).category})</span>
+                  )}
+                </div>
+              )
+            }
+            // Otherwise use the key as the item name
+            return (
+              <div key={index} className="p-2 bg-gray-50 rounded">
                 <span className="font-medium">{key}</span>
-                {typeof value === "object" && value !== null && (
-                  <div className="text-sm text-gray-600 mt-1">{JSON.stringify(value)}</div>
-                )}
               </div>
-              {typeof value === "number" && <span className="text-green-600 font-medium">₱{value.toFixed(2)}</span>}
-            </div>
-          ))}
+            )
+          })}
         </div>
       )
     }
