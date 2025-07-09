@@ -332,90 +332,61 @@ function AdminDashboard() {
     return <span className="text-gray-500">No items data</span>
   }
 
-  // Render actual order items function
+  // Render actual order items function - simplified to show only names
   const renderOrderItems = (items: any) => {
     if (!items) return <span className="text-gray-500">No items selected</span>
 
-    // Handle array of items
-    if (Array.isArray(items)) {
-      if (items.length === 0) return <span className="text-gray-500">No items selected</span>
+    const extractItemNames = (data: any): string[] => {
+      const names: string[] = []
 
-      return (
-        <div className="space-y-2">
-          {items.map((item, index) => (
-            <div key={index} className="flex justify-between items-center p-2 bg-gray-50 rounded">
-              <div>
-                <span className="font-medium">{item.name || item}</span>
-                {item.category && <span className="text-sm text-gray-500 ml-2">({item.category})</span>}
-              </div>
-              {item.price && <span className="text-green-600 font-medium">₱{Number(item.price).toFixed(2)}</span>}
-            </div>
-          ))}
-        </div>
-      )
-    }
-
-    // Handle object format - extract item names only
-    if (typeof items === "object" && items !== null) {
-      // Check if it's a single item object with name property
-      if (items.name) {
-        return (
-          <div className="p-2 bg-gray-50 rounded">
-            <span className="font-medium">{items.name}</span>
-            {items.category && <span className="text-sm text-gray-500 ml-2">({items.category})</span>}
-          </div>
-        )
+      if (Array.isArray(data)) {
+        data.forEach((item) => {
+          if (typeof item === "string") {
+            names.push(item)
+          } else if (typeof item === "object" && item !== null && item.name) {
+            names.push(item.name)
+          }
+        })
+      } else if (typeof data === "object" && data !== null) {
+        // Handle the specific structure: {"snack":[{...}],"main":[],"side":[],"beverage":[]}
+        Object.values(data).forEach((categoryItems) => {
+          if (Array.isArray(categoryItems)) {
+            categoryItems.forEach((item) => {
+              if (typeof item === "object" && item !== null && item.name) {
+                names.push(item.name)
+              } else if (typeof item === "string") {
+                names.push(item)
+              }
+            })
+          }
+        })
+      } else if (typeof data === "string") {
+        // Handle comma-separated string
+        const itemList = data
+          .split(",")
+          .map((item) => item.trim())
+          .filter((item) => item.length > 0)
+        names.push(...itemList)
       }
 
-      // Handle multiple items as object entries
-      const itemEntries = Object.entries(items)
-      if (itemEntries.length === 0) return <span className="text-gray-500">No items selected</span>
-
-      return (
-        <div className="space-y-2">
-          {itemEntries.map(([key, value], index) => {
-            // If value is an object with name property, use that
-            if (typeof value === "object" && value !== null && (value as any).name) {
-              return (
-                <div key={index} className="p-2 bg-gray-50 rounded">
-                  <span className="font-medium">{(value as any).name}</span>
-                  {(value as any).category && (
-                    <span className="text-sm text-gray-500 ml-2">({(value as any).category})</span>
-                  )}
-                </div>
-              )
-            }
-            // Otherwise use the key as the item name
-            return (
-              <div key={index} className="p-2 bg-gray-50 rounded">
-                <span className="font-medium">{key}</span>
-              </div>
-            )
-          })}
-        </div>
-      )
+      return names
     }
 
-    // Handle string format (comma-separated items)
-    if (typeof items === "string") {
-      const itemList = items
-        .split(",")
-        .map((item) => item.trim())
-        .filter((item) => item.length > 0)
-      if (itemList.length === 0) return <span className="text-gray-500">No items selected</span>
+    const itemNames = extractItemNames(items)
 
-      return (
-        <div className="space-y-2">
-          {itemList.map((item, index) => (
-            <div key={index} className="p-2 bg-gray-50 rounded">
-              <span className="font-medium">{item}</span>
-            </div>
-          ))}
-        </div>
-      )
+    if (itemNames.length === 0) {
+      return <span className="text-gray-500">No items selected</span>
     }
 
-    return <span className="text-gray-500">No items data available</span>
+    return (
+      <div className="space-y-2">
+        {itemNames.map((name, index) => (
+          <div key={index} className="p-2 bg-gray-50 rounded">
+            <span className="font-medium">{name}</span>
+          </div>
+        ))}
+      </div>
+    )
   }
 
   // CRUD Operations for Customers
