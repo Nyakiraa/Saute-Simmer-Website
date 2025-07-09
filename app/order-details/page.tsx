@@ -1,116 +1,198 @@
 "use client"
 
+import type React from "react"
+
 import { useState, useEffect } from "react"
 import { useSearchParams } from "next/navigation"
-import { Button } from "@/components/ui/button"
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
-import { Input } from "@/components/ui/input"
-import { Label } from "@/components/ui/label"
-import { Textarea } from "@/components/ui/textarea"
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
-import { Separator } from "@/components/ui/separator"
-import { CalendarDays, Clock, User, CreditCard, CheckCircle } from "lucide-react"
-import { Header } from "@/components/Header"
-import { Footer } from "@/components/Footer"
+import Header from "../../components/Header"
+import Footer from "../../components/Footer"
+import { supabase } from "@/lib/supabase-auth"
 
-interface OrderItem {
-  id: string
-  name: string
-  price: number
-  quantity: number
-  type: "item" | "meal_set"
-}
-
-interface Location {
+interface MealSet {
   id: number
   name: string
-  address: string
-  phone: string
-  status: string
+  type: "premium" | "standard" | "basic"
+  price: number
+  description: string
+  comment?: string
+}
+
+interface MenuItem {
+  id: number
+  name: string
+  price: number
+  category: "snack" | "main" | "side" | "beverage"
+  description: string
 }
 
 export default function OrderDetailsPage() {
   const searchParams = useSearchParams()
-  const [orderItems, setOrderItems] = useState<OrderItem[]>([])
-  const [locations, setLocations] = useState<Location[]>([])
-  const [loading, setLoading] = useState(false)
-  const [orderSubmitted, setOrderSubmitted] = useState(false)
-  const [orderId, setOrderId] = useState<string>("")
-
-  // Customer Information
-  const [customerInfo, setCustomerInfo] = useState({
-    name: "",
-    email: "",
-    phone: "",
+  const [selectedMealSet, setSelectedMealSet] = useState<MealSet | null>(null)
+  const [selectedItems, setSelectedItems] = useState<{ [key: string]: MenuItem[] }>({
+    snack: [],
+    main: [],
+    side: [],
+    beverage: [],
   })
-
-  // Order Details
-  const [orderDetails, setOrderDetails] = useState({
-    orderType: "delivery",
-    deliveryAddress: "",
+  const [quantity, setQuantity] = useState(1)
+  const [isCustomOrder, setIsCustomOrder] = useState(false)
+  const [isLoading, setIsLoading] = useState(true)
+  const [orderSuccess, setOrderSuccess] = useState(false)
+  const [isSubmitting, setIsSubmitting] = useState(false)
+  const [formData, setFormData] = useState({
+    eventType: "",
+    eventDate: "",
+    eventStartTime: "",
+    eventEndTime: "",
     deliveryDate: "",
     deliveryTime: "",
-    specialInstructions: "",
-    locationId: "",
-    paymentMethod: "cash",
-  })
-
-  // Event Details (for catering)
-  const [eventDetails, setEventDetails] = useState({
-    eventType: "",
-    guestCount: 1,
-    eventLocation: "",
+    deliveryAddress: "",
+    contactPerson: "",
+    email: "",
+    contactNumber: "",
+    paymentMethod: "",
+    specialRequests: "",
   })
 
   useEffect(() => {
-    // Parse order items from URL params
-    const itemsParam = searchParams.get("items")
-    if (itemsParam) {
+    const initializeOrder = async () => {
+      // Check authentication
       try {
-        const items = JSON.parse(decodeURIComponent(itemsParam))
-        setOrderItems(items)
+        const {
+          data: { session },
+          error,
+        } = await supabase.auth.getSession()
+
+        if (error || !session) {
+          alert("Please login first to place an order.")
+          window.location.href = "/login"
+          return
+        }
+
+        // Pre-fill email from user session
+        setFormData((prev) => ({
+          ...prev,
+          email: session.user.email || "",
+          contactPerson: session.user.user_metadata?.full_name || session.user.email || "",
+        }))
+
+        const setId = searchParams?.get("set")
+        const customParam = searchParams?.get("custom")
+        const itemsParam = searchParams?.get("items")
+        const quantityParam = searchParams?.get("quantity")
+
+        if (quantityParam) {
+          setQuantity(Number.parseInt(quantityParam) || 1)
+        }
+
+        if (customParam === "true" && itemsParam) {
+          setIsCustomOrder(true)
+          try {
+            const items = JSON.parse(decodeURIComponent(itemsParam))
+            setSelectedItems(items)
+          } catch (error) {
+            console.error("Error parsing items:", error)
+          }
+        } else if (setId) {
+          // Load meal set details
+          await loadMealSet(Number.parseInt(setId))
+        }
+
+        // Set minimum dates
+        const tomorrow = new Date()
+        tomorrow.setDate(tomorrow.getDate() + 1)
+        const minDate = tomorrow.toISOString().split("T")[0]
+
+        setTimeout(() => {
+          const eventDateInput = document.getElementById("event-date") as HTMLInputElement
+          const deliveryDateInput = document.getElementById("delivery-date") as HTMLInputElement
+          if (eventDateInput) eventDateInput.min = minDate
+          if (deliveryDateInput) deliveryDateInput.min = minDate
+        }, 100)
       } catch (error) {
-        console.error("Error parsing order items:", error)
+        console.error("Initialization error:", error)
+        window.location.href = "/login"
+      } finally {
+        setIsLoading(false)
       }
     }
 
-    // Fetch available locations
-    fetchLocations()
+    initializeOrder()
   }, [searchParams])
 
-  const fetchLocations = async () => {
+  const loadMealSet = async (setId: number) => {
     try {
-      const response = await fetch("/api/locations")
+      const response = await fetch(`/api/meal-sets/${setId}`)
       if (response.ok) {
-        const data = await response.json()
-        setLocations(data.filter((loc: Location) => loc.status === "active"))
+        const mealSet = await response.json()
+        setSelectedMealSet(mealSet)
       }
     } catch (error) {
-      console.error("Error fetching locations:", error)
+      console.error("Error loading meal set:", error)
     }
   }
 
-  const calculateTotal = () => {
-    return orderItems.reduce((total, item) => total + item.price * item.quantity, 0)
+  const getTotalPrice = () => {
+    if (selectedMealSet) {
+      return selectedMealSet.price
+    }
+
+    let total = 0
+    Object.values(selectedItems).forEach((categoryItems) => {
+      categoryItems.forEach((item) => {
+        total += item.price
+      })
+    })
+    return total
   }
 
-  const handleSubmitOrder = async () => {
-    setLoading(true)
+  const handleInputChange = (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement>) => {
+    setFormData({
+      ...formData,
+      [e.target.name]: e.target.value,
+    })
+  }
+
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault()
+    setIsSubmitting(true)
+
     try {
+      const {
+        data: { session },
+      } = await supabase.auth.getSession()
+
+      if (!session) {
+        alert("Please login to place an order.")
+        return
+      }
+
+      const totalAmount = getTotalPrice() * quantity
+
+      // Prepare order data with all required fields
       const orderData = {
-        customer_name: customerInfo.name,
-        customer_email: customerInfo.email,
-        customer_phone: customerInfo.phone,
-        order_type: orderDetails.orderType,
-        delivery_address: orderDetails.deliveryAddress,
-        delivery_date: orderDetails.deliveryDate,
-        delivery_time: orderDetails.deliveryTime,
-        special_instructions: orderDetails.specialInstructions,
-        location_id: orderDetails.locationId ? Number.parseInt(orderDetails.locationId) : null,
-        payment_method: orderDetails.paymentMethod,
-        total_amount: calculateTotal(),
-        items: orderItems,
-        event_details: orderDetails.orderType === "catering" ? eventDetails : null,
+        // Required fields for the database
+        customer_name: formData.contactPerson || session.user.email || "Unknown Customer",
+        total_amount: totalAmount,
+        // Additional order details
+        customer_id: null, // Will be set by the API if customer exists
+        customer_email: formData.email,
+        order_type: isCustomOrder ? "custom" : "meal_set",
+        meal_set_id: selectedMealSet?.id || null,
+        meal_set_name: selectedMealSet?.name || null,
+        quantity: quantity,
+        order_date: new Date().toISOString().split("T")[0],
+        event_type: formData.eventType,
+        event_date: formData.eventDate || null,
+        delivery_date: formData.eventDate || null,
+        delivery_address: formData.deliveryAddress,
+        contact_person: formData.contactPerson,
+        contact_number: formData.contactNumber,
+        payment_method: formData.paymentMethod,
+        special_requests: formData.specialRequests,
+        special_instructions: formData.specialRequests,
+        // For custom orders, include selected items
+        items: isCustomOrder ? selectedItems : [],
       }
 
       console.log("Submitting order:", orderData)
@@ -119,311 +201,494 @@ export default function OrderDetailsPage() {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
+          Authorization: `Bearer ${session.access_token}`,
         },
         body: JSON.stringify(orderData),
       })
 
+      const result = await response.json()
+
       if (response.ok) {
-        const result = await response.json()
-        setOrderId(result.id)
-        setOrderSubmitted(true)
-        console.log("Order submitted successfully:", result)
+        console.log("Order placed successfully:", result)
+        setOrderSuccess(true)
+        window.scrollTo(0, 0)
       } else {
-        const error = await response.json()
-        console.error("Error submitting order:", error)
-        alert("Failed to submit order. Please try again.")
+        throw new Error(result.error || "Failed to place order")
       }
     } catch (error) {
       console.error("Error submitting order:", error)
-      alert("Failed to submit order. Please try again.")
+      alert(`Failed to submit order: ${error instanceof Error ? error.message : "Unknown error"}`)
     } finally {
-      setLoading(false)
+      setIsSubmitting(false)
     }
   }
 
-  if (orderSubmitted) {
+  if (isLoading) {
     return (
-      <div className="min-h-screen bg-gray-50">
+      <>
         <Header />
-        <main className="max-w-2xl mx-auto px-4 py-8">
-          <Card className="text-center">
-            <CardHeader>
-              <div className="mx-auto w-16 h-16 bg-green-100 rounded-full flex items-center justify-center mb-4">
-                <CheckCircle className="w-8 h-8 text-green-600" />
-              </div>
-              <CardTitle className="text-2xl text-green-600">Order Confirmed!</CardTitle>
-              <CardDescription>Your order has been successfully submitted and is being processed.</CardDescription>
-            </CardHeader>
-            <CardContent className="space-y-4">
-              <div className="bg-gray-50 p-4 rounded-lg">
-                <p className="text-sm text-gray-600">Order ID</p>
-                <p className="font-mono text-lg font-semibold">#{orderId}</p>
-              </div>
-              <p className="text-gray-600">We'll send you updates about your order via email and SMS.</p>
-              <div className="flex gap-4 justify-center pt-4">
-                <Button onClick={() => (window.location.href = "/")}>Back to Home</Button>
-                <Button variant="outline" onClick={() => (window.location.href = "/orders")}>
-                  View My Orders
-                </Button>
-              </div>
-            </CardContent>
-          </Card>
-        </main>
+        <div style={{ textAlign: "center", padding: "100px 20px" }}>
+          <div style={{ fontSize: "2rem", marginBottom: "20px" }}>Loading order details...</div>
+        </div>
         <Footer />
-      </div>
+      </>
+    )
+  }
+
+  if (orderSuccess) {
+    return (
+      <>
+        <Header />
+        <section style={{ textAlign: "center", padding: "50px 20px", maxWidth: "1400px", margin: "0 auto" }}>
+          <div style={{ fontSize: "5rem", color: "var(--success-color)", marginBottom: "20px" }}>
+            <i className="fas fa-check-circle"></i>
+          </div>
+          <h2 style={{ fontSize: "2rem", marginBottom: "15px", color: "var(--success-color)" }}>
+            Order Placed Successfully!
+          </h2>
+          <p
+            style={{
+              fontSize: "1.2rem",
+              marginBottom: "30px",
+              maxWidth: "600px",
+              marginLeft: "auto",
+              marginRight: "auto",
+            }}
+          >
+            Thank you for your order! Your catering request has been submitted and is pending approval from our admin
+            team. You will receive a confirmation email shortly.
+          </p>
+          <div
+            style={{
+              backgroundColor: "#f9f9f9",
+              maxWidth: "500px",
+              margin: "0 auto 30px",
+              padding: "20px",
+              borderRadius: "10px",
+              textAlign: "left",
+            }}
+          >
+            <div style={{ display: "flex", marginBottom: "10px" }}>
+              <div style={{ width: "150px", fontWeight: "500" }}>Order Type:</div>
+              <div style={{ flex: 1 }}>{isCustomOrder ? "Custom Meal" : "Meal Set"}</div>
+            </div>
+            <div style={{ display: "flex", marginBottom: "10px" }}>
+              <div style={{ width: "150px", fontWeight: "500" }}>Event Type:</div>
+              <div style={{ flex: 1 }}>{formData.eventType}</div>
+            </div>
+            <div style={{ display: "flex", marginBottom: "10px" }}>
+              <div style={{ width: "150px", fontWeight: "500" }}>Event Date:</div>
+              <div style={{ flex: 1 }}>
+                {formData.eventDate
+                  ? new Date(formData.eventDate).toLocaleDateString("en-US", {
+                      month: "long",
+                      day: "numeric",
+                      year: "numeric",
+                    })
+                  : ""}
+              </div>
+            </div>
+            <div style={{ display: "flex", marginBottom: "10px" }}>
+              <div style={{ width: "150px", fontWeight: "500" }}>Payment Method:</div>
+              <div style={{ flex: 1, textTransform: "capitalize" }}>{formData.paymentMethod}</div>
+            </div>
+            <div style={{ display: "flex", marginBottom: "10px" }}>
+              <div style={{ width: "150px", fontWeight: "500" }}>Total Amount:</div>
+              <div style={{ flex: 1, fontWeight: "600", color: "var(--primary-color)" }}>
+                ₱{(getTotalPrice() * quantity).toFixed(2)}
+              </div>
+            </div>
+          </div>
+          <div style={{ marginTop: "30px" }}>
+            <button
+              onClick={() => (window.location.href = "/orders")}
+              className="btn btn-outline"
+              style={{ marginRight: "10px" }}
+            >
+              View My Orders
+            </button>
+            <button onClick={() => (window.location.href = "/")} className="btn btn-primary">
+              Back to Home
+            </button>
+          </div>
+        </section>
+        <Footer />
+      </>
     )
   }
 
   return (
-    <div className="min-h-screen bg-gray-50">
+    <>
       <Header />
-      <main className="max-w-4xl mx-auto px-4 py-8">
-        <div className="grid gap-8 lg:grid-cols-2">
-          {/* Order Summary */}
-          <div className="space-y-6">
-            <Card>
-              <CardHeader>
-                <CardTitle>Order Summary</CardTitle>
-                <CardDescription>Review your selected items</CardDescription>
-              </CardHeader>
-              <CardContent className="space-y-4">
-                {orderItems.map((item) => (
-                  <div key={`${item.type}-${item.id}`} className="flex justify-between items-center">
-                    <div>
-                      <p className="font-medium">{item.name}</p>
-                      <p className="text-sm text-gray-600">
-                        ${item.price.toFixed(2)} × {item.quantity}
-                      </p>
-                    </div>
-                    <p className="font-semibold">${(item.price * item.quantity).toFixed(2)}</p>
-                  </div>
-                ))}
-                <Separator />
-                <div className="flex justify-between items-center text-lg font-bold">
-                  <span>Total</span>
-                  <span>${calculateTotal().toFixed(2)}</span>
-                </div>
-              </CardContent>
-            </Card>
+      <section
+        style={{
+          display: "grid",
+          gridTemplateColumns: "1fr 350px",
+          gap: "30px",
+          maxWidth: "1400px",
+          margin: "40px auto",
+          padding: "0 5%",
+        }}
+      >
+        {/* Order Details */}
+        <div
+          style={{
+            backgroundColor: "var(--light-text)",
+            borderRadius: "15px",
+            padding: "30px",
+            boxShadow: "0 10px 20px var(--shadow-color)",
+          }}
+        >
+          <h2 style={{ fontSize: "1.5rem", marginBottom: "20px", color: "var(--primary-color)" }}>Order Details</h2>
+          <div style={{ marginBottom: "20px" }}>
+            <div style={{ display: "flex", marginBottom: "10px" }}>
+              <div style={{ width: "150px", fontWeight: "500" }}>Order Type:</div>
+              <div style={{ flex: 1 }}>{isCustomOrder ? "Custom Meal" : "Meal Set"}</div>
+            </div>
+            <div style={{ display: "flex", marginBottom: "10px" }}>
+              <div style={{ width: "150px", fontWeight: "500" }}>Quantity:</div>
+              <div style={{ flex: 1 }}>{quantity} persons</div>
+            </div>
           </div>
 
-          {/* Order Details Form */}
-          <div className="space-y-6">
-            {/* Customer Information */}
-            <Card>
-              <CardHeader>
-                <CardTitle className="flex items-center gap-2">
-                  <User className="w-5 h-5" />
-                  Customer Information
-                </CardTitle>
-              </CardHeader>
-              <CardContent className="space-y-4">
-                <div className="space-y-2">
-                  <Label htmlFor="name">Full Name *</Label>
-                  <Input
-                    id="name"
-                    value={customerInfo.name}
-                    onChange={(e) => setCustomerInfo({ ...customerInfo, name: e.target.value })}
-                    required
-                  />
+          {selectedMealSet && (
+            <div style={{ marginBottom: "20px" }}>
+              <h3 style={{ fontSize: "1.2rem", color: "var(--primary-color)", marginBottom: "10px" }}>
+                Selected Meal Set
+              </h3>
+              <div style={{ padding: "15px", backgroundColor: "#f9f9f9", borderRadius: "8px" }}>
+                <h4 style={{ margin: "0 0 5px 0", fontWeight: "600" }}>{selectedMealSet.name}</h4>
+                <p style={{ margin: "0 0 10px 0", color: "#666", fontSize: "0.9rem" }}>{selectedMealSet.description}</p>
+                <div style={{ fontSize: "1.1rem", fontWeight: "600", color: "var(--primary-color)" }}>
+                  ₱{selectedMealSet.price.toFixed(2)}
                 </div>
-                <div className="space-y-2">
-                  <Label htmlFor="email">Email Address *</Label>
-                  <Input
-                    id="email"
-                    type="email"
-                    value={customerInfo.email}
-                    onChange={(e) => setCustomerInfo({ ...customerInfo, email: e.target.value })}
-                    required
-                  />
-                </div>
-                <div className="space-y-2">
-                  <Label htmlFor="phone">Phone Number</Label>
-                  <Input
-                    id="phone"
-                    type="tel"
-                    value={customerInfo.phone}
-                    onChange={(e) => setCustomerInfo({ ...customerInfo, phone: e.target.value })}
-                  />
-                </div>
-              </CardContent>
-            </Card>
-
-            {/* Order Type */}
-            <Card>
-              <CardHeader>
-                <CardTitle>Order Type</CardTitle>
-              </CardHeader>
-              <CardContent className="space-y-4">
-                <Select
-                  value={orderDetails.orderType}
-                  onValueChange={(value) => setOrderDetails({ ...orderDetails, orderType: value })}
-                >
-                  <SelectTrigger>
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="delivery">Delivery</SelectItem>
-                    <SelectItem value="pickup">Pickup</SelectItem>
-                    <SelectItem value="catering">Catering Event</SelectItem>
-                  </SelectContent>
-                </Select>
-
-                {orderDetails.orderType === "delivery" && (
-                  <div className="space-y-4">
-                    <div className="space-y-2">
-                      <Label htmlFor="address">Delivery Address *</Label>
-                      <Textarea
-                        id="address"
-                        value={orderDetails.deliveryAddress}
-                        onChange={(e) => setOrderDetails({ ...orderDetails, deliveryAddress: e.target.value })}
-                        placeholder="Enter your full delivery address"
-                        required
-                      />
-                    </div>
-                  </div>
+                {selectedMealSet.comment && (
+                  <p
+                    style={{
+                      margin: "10px 0 0 0",
+                      fontSize: "0.9rem",
+                      fontStyle: "italic",
+                      color: "var(--accent-color)",
+                    }}
+                  >
+                    {selectedMealSet.comment}
+                  </p>
                 )}
+              </div>
+            </div>
+          )}
 
-                {orderDetails.orderType === "pickup" && locations.length > 0 && (
-                  <div className="space-y-2">
-                    <Label htmlFor="location">Pickup Location *</Label>
-                    <Select
-                      value={orderDetails.locationId}
-                      onValueChange={(value) => setOrderDetails({ ...orderDetails, locationId: value })}
+          {isCustomOrder && (
+            <div style={{ marginBottom: "20px" }}>
+              <h3 style={{ fontSize: "1.2rem", color: "var(--primary-color)", marginBottom: "10px" }}>
+                Selected Items
+              </h3>
+              {Object.entries(selectedItems).map(([category, items]) => {
+                if (items.length === 0) return null
+                return (
+                  <div key={category} style={{ marginBottom: "15px" }}>
+                    <h4
+                      style={{
+                        fontSize: "1rem",
+                        color: "var(--primary-color)",
+                        marginBottom: "8px",
+                        textTransform: "capitalize",
+                      }}
                     >
-                      <SelectTrigger>
-                        <SelectValue placeholder="Select pickup location" />
-                      </SelectTrigger>
-                      <SelectContent>
-                        {locations.map((location) => (
-                          <SelectItem key={location.id} value={location.id.toString()}>
-                            {location.name} - {location.address}
-                          </SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
+                      {category === "main" ? "Main Courses" : category === "side" ? "Side Dishes" : category}s
+                    </h4>
+                    {items.map((item) => (
+                      <div
+                        key={item.id}
+                        style={{
+                          display: "flex",
+                          justifyContent: "space-between",
+                          marginBottom: "5px",
+                          fontSize: "0.9rem",
+                        }}
+                      >
+                        <span>{item.name}</span>
+                        <span>₱{item.price.toFixed(2)}</span>
+                      </div>
+                    ))}
                   </div>
-                )}
+                )
+              })}
+            </div>
+          )}
 
-                {orderDetails.orderType === "catering" && (
-                  <div className="space-y-4">
-                    <div className="space-y-2">
-                      <Label htmlFor="eventType">Event Type</Label>
-                      <Input
-                        id="eventType"
-                        value={eventDetails.eventType}
-                        onChange={(e) => setEventDetails({ ...eventDetails, eventType: e.target.value })}
-                        placeholder="e.g., Wedding, Corporate Event, Birthday Party"
-                      />
-                    </div>
-                    <div className="space-y-2">
-                      <Label htmlFor="guestCount">Number of Guests</Label>
-                      <Input
-                        id="guestCount"
-                        type="number"
-                        min="1"
-                        value={eventDetails.guestCount}
-                        onChange={(e) =>
-                          setEventDetails({ ...eventDetails, guestCount: Number.parseInt(e.target.value) || 1 })
-                        }
-                      />
-                    </div>
-                    <div className="space-y-2">
-                      <Label htmlFor="eventLocation">Event Location</Label>
-                      <Textarea
-                        id="eventLocation"
-                        value={eventDetails.eventLocation}
-                        onChange={(e) => setEventDetails({ ...eventDetails, eventLocation: e.target.value })}
-                        placeholder="Enter the event venue address"
-                      />
-                    </div>
-                  </div>
-                )}
-
-                <div className="grid grid-cols-2 gap-4">
-                  <div className="space-y-2">
-                    <Label htmlFor="date">
-                      <CalendarDays className="w-4 h-4 inline mr-1" />
-                      {orderDetails.orderType === "catering" ? "Event Date" : "Delivery Date"} *
-                    </Label>
-                    <Input
-                      id="date"
-                      type="date"
-                      value={orderDetails.deliveryDate}
-                      onChange={(e) => setOrderDetails({ ...orderDetails, deliveryDate: e.target.value })}
-                      required
-                    />
-                  </div>
-                  <div className="space-y-2">
-                    <Label htmlFor="time">
-                      <Clock className="w-4 h-4 inline mr-1" />
-                      {orderDetails.orderType === "catering" ? "Event Time" : "Delivery Time"}
-                    </Label>
-                    <Input
-                      id="time"
-                      type="time"
-                      value={orderDetails.deliveryTime}
-                      onChange={(e) => setOrderDetails({ ...orderDetails, deliveryTime: e.target.value })}
-                    />
-                  </div>
-                </div>
-              </CardContent>
-            </Card>
-
-            {/* Payment Method */}
-            <Card>
-              <CardHeader>
-                <CardTitle className="flex items-center gap-2">
-                  <CreditCard className="w-5 h-5" />
-                  Payment Method
-                </CardTitle>
-              </CardHeader>
-              <CardContent>
-                <Select
-                  value={orderDetails.paymentMethod}
-                  onValueChange={(value) => setOrderDetails({ ...orderDetails, paymentMethod: value })}
-                >
-                  <SelectTrigger>
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="cash">Cash on Delivery</SelectItem>
-                    <SelectItem value="card">Credit/Debit Card</SelectItem>
-                    <SelectItem value="bank_transfer">Bank Transfer</SelectItem>
-                    <SelectItem value="gcash">GCash</SelectItem>
-                  </SelectContent>
-                </Select>
-              </CardContent>
-            </Card>
-
-            {/* Special Instructions */}
-            <Card>
-              <CardHeader>
-                <CardTitle>Special Instructions</CardTitle>
-              </CardHeader>
-              <CardContent>
-                <Textarea
-                  value={orderDetails.specialInstructions}
-                  onChange={(e) => setOrderDetails({ ...orderDetails, specialInstructions: e.target.value })}
-                  placeholder="Any special requests or dietary requirements..."
-                  rows={3}
-                />
-              </CardContent>
-            </Card>
-
-            {/* Submit Button */}
-            <Button
-              onClick={handleSubmitOrder}
-              disabled={loading || !customerInfo.name || !customerInfo.email || !orderDetails.deliveryDate}
-              className="w-full"
-              size="lg"
+          <div style={{ marginTop: "20px", paddingTop: "20px", borderTop: "2px solid #ddd" }}>
+            <div style={{ display: "flex", justifyContent: "space-between", marginBottom: "10px" }}>
+              <div style={{ fontWeight: "500" }}>Subtotal (per person):</div>
+              <div style={{ fontWeight: "600" }}>₱{getTotalPrice().toFixed(2)}</div>
+            </div>
+            <div style={{ display: "flex", justifyContent: "space-between", marginBottom: "10px" }}>
+              <div style={{ fontWeight: "500" }}>Quantity:</div>
+              <div style={{ fontWeight: "600" }}>{quantity} persons</div>
+            </div>
+            <div
+              style={{
+                display: "flex",
+                justifyContent: "space-between",
+                fontSize: "1.2rem",
+                color: "var(--primary-color)",
+                fontWeight: "600",
+              }}
             >
-              {loading ? "Submitting Order..." : `Place Order - $${calculateTotal().toFixed(2)}`}
-            </Button>
+              <div>Total:</div>
+              <div>₱{(getTotalPrice() * quantity).toFixed(2)}</div>
+            </div>
           </div>
         </div>
-      </main>
+
+        {/* Customer Form */}
+        <div
+          style={{
+            backgroundColor: "var(--light-text)",
+            borderRadius: "15px",
+            padding: "30px",
+            boxShadow: "0 10px 20px var(--shadow-color)",
+          }}
+        >
+          <h2 style={{ fontSize: "1.5rem", marginBottom: "20px", color: "var(--primary-color)" }}>Event Information</h2>
+          <form onSubmit={handleSubmit}>
+            <div style={{ marginBottom: "20px" }}>
+              <label style={{ display: "block", marginBottom: "8px", fontWeight: "500" }}>Type of Event *</label>
+              <select
+                name="eventType"
+                value={formData.eventType}
+                onChange={handleInputChange}
+                required
+                style={{
+                  width: "100%",
+                  padding: "12px 15px",
+                  border: "1px solid #ddd",
+                  borderRadius: "8px",
+                  fontSize: "1rem",
+                  fontFamily: "Poppins, sans-serif",
+                  backgroundColor: "var(--light-text)",
+                  cursor: "pointer",
+                }}
+              >
+                <option value="">Select event type</option>
+                <option value="corporate">Corporate Meeting</option>
+                <option value="conference">Conference</option>
+                <option value="seminar">Seminar</option>
+                <option value="workshop">Workshop</option>
+                <option value="birthday">Birthday Party</option>
+                <option value="wedding">Wedding</option>
+                <option value="anniversary">Anniversary</option>
+                <option value="graduation">Graduation</option>
+                <option value="other">Other</option>
+              </select>
+            </div>
+
+            <div style={{ marginBottom: "20px" }}>
+              <label style={{ display: "block", marginBottom: "8px", fontWeight: "500" }}>Event Date *</label>
+              <input
+                type="date"
+                id="event-date"
+                name="eventDate"
+                value={formData.eventDate}
+                onChange={handleInputChange}
+                required
+                style={{
+                  width: "100%",
+                  padding: "12px 15px",
+                  border: "1px solid #ddd",
+                  borderRadius: "8px",
+                  fontSize: "1rem",
+                  fontFamily: "Poppins, sans-serif",
+                }}
+              />
+            </div>
+
+            <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "15px", marginBottom: "20px" }}>
+              <div>
+                <label style={{ display: "block", marginBottom: "8px", fontWeight: "500" }}>Start Time *</label>
+                <input
+                  type="time"
+                  name="eventStartTime"
+                  value={formData.eventStartTime}
+                  onChange={handleInputChange}
+                  required
+                  style={{
+                    width: "100%",
+                    padding: "12px 15px",
+                    border: "1px solid #ddd",
+                    borderRadius: "8px",
+                    fontSize: "1rem",
+                    fontFamily: "Poppins, sans-serif",
+                  }}
+                />
+              </div>
+              <div>
+                <label style={{ display: "block", marginBottom: "8px", fontWeight: "500" }}>End Time *</label>
+                <input
+                  type="time"
+                  name="eventEndTime"
+                  value={formData.eventEndTime}
+                  onChange={handleInputChange}
+                  required
+                  style={{
+                    width: "100%",
+                    padding: "12px 15px",
+                    border: "1px solid #ddd",
+                    borderRadius: "8px",
+                    fontSize: "1rem",
+                    fontFamily: "Poppins, sans-serif",
+                  }}
+                />
+              </div>
+            </div>
+
+            <div style={{ marginBottom: "20px" }}>
+              <label style={{ display: "block", marginBottom: "8px", fontWeight: "500" }}>Delivery Address *</label>
+              <textarea
+                name="deliveryAddress"
+                value={formData.deliveryAddress}
+                onChange={handleInputChange}
+                placeholder="Enter complete delivery address"
+                required
+                style={{
+                  width: "100%",
+                  padding: "12px 15px",
+                  border: "1px solid #ddd",
+                  borderRadius: "8px",
+                  fontSize: "1rem",
+                  fontFamily: "Poppins, sans-serif",
+                  resize: "vertical",
+                  minHeight: "100px",
+                }}
+              />
+            </div>
+
+            <div style={{ marginBottom: "20px" }}>
+              <label style={{ display: "block", marginBottom: "8px", fontWeight: "500" }}>Contact Person *</label>
+              <input
+                type="text"
+                name="contactPerson"
+                value={formData.contactPerson}
+                onChange={handleInputChange}
+                placeholder="Name of contact person"
+                required
+                style={{
+                  width: "100%",
+                  padding: "12px 15px",
+                  border: "1px solid #ddd",
+                  borderRadius: "8px",
+                  fontSize: "1rem",
+                  fontFamily: "Poppins, sans-serif",
+                }}
+              />
+            </div>
+
+            <div style={{ marginBottom: "20px" }}>
+              <label style={{ display: "block", marginBottom: "8px", fontWeight: "500" }}>Email Address *</label>
+              <input
+                type="email"
+                name="email"
+                value={formData.email}
+                onChange={handleInputChange}
+                placeholder="Enter your email"
+                required
+                style={{
+                  width: "100%",
+                  padding: "12px 15px",
+                  border: "1px solid #ddd",
+                  borderRadius: "8px",
+                  fontSize: "1rem",
+                  fontFamily: "Poppins, sans-serif",
+                }}
+              />
+            </div>
+
+            <div style={{ marginBottom: "20px" }}>
+              <label style={{ display: "block", marginBottom: "8px", fontWeight: "500" }}>Contact Number *</label>
+              <input
+                type="tel"
+                name="contactNumber"
+                value={formData.contactNumber}
+                onChange={handleInputChange}
+                placeholder="Phone number"
+                required
+                style={{
+                  width: "100%",
+                  padding: "12px 15px",
+                  border: "1px solid #ddd",
+                  borderRadius: "8px",
+                  fontSize: "1rem",
+                  fontFamily: "Poppins, sans-serif",
+                }}
+              />
+            </div>
+
+            <div style={{ marginBottom: "20px" }}>
+              <label style={{ display: "block", marginBottom: "8px", fontWeight: "500" }}>Payment Method *</label>
+              <select
+                name="paymentMethod"
+                value={formData.paymentMethod}
+                onChange={handleInputChange}
+                required
+                style={{
+                  width: "100%",
+                  padding: "12px 15px",
+                  border: "1px solid #ddd",
+                  borderRadius: "8px",
+                  fontSize: "1rem",
+                  fontFamily: "Poppins, sans-serif",
+                  backgroundColor: "var(--light-text)",
+                  cursor: "pointer",
+                }}
+              >
+                <option value="">Select payment method</option>
+                <option value="cash">Cash on Delivery</option>
+                <option value="bank">Bank Transfer</option>
+                <option value="gcash">GCash</option>
+                <option value="paymaya">PayMaya</option>
+                <option value="credit">Credit Card</option>
+              </select>
+            </div>
+
+            <div style={{ marginBottom: "20px" }}>
+              <label style={{ display: "block", marginBottom: "8px", fontWeight: "500" }}>Special Requests</label>
+              <textarea
+                name="specialRequests"
+                value={formData.specialRequests}
+                onChange={handleInputChange}
+                placeholder="Any special requests or dietary requirements"
+                style={{
+                  width: "100%",
+                  padding: "12px 15px",
+                  border: "1px solid #ddd",
+                  borderRadius: "8px",
+                  fontSize: "1rem",
+                  fontFamily: "Poppins, sans-serif",
+                  resize: "vertical",
+                  minHeight: "100px",
+                }}
+              />
+            </div>
+
+            <div style={{ marginTop: "30px", textAlign: "center" }}>
+              <button
+                type="submit"
+                disabled={isSubmitting}
+                className="btn btn-primary"
+                style={{
+                  width: "100%",
+                  padding: "12px",
+                  opacity: isSubmitting ? 0.7 : 1,
+                  cursor: isSubmitting ? "not-allowed" : "pointer",
+                }}
+              >
+                {isSubmitting ? "Placing Order..." : "Place Order"}
+              </button>
+            </div>
+          </form>
+        </div>
+      </section>
       <Footer />
-    </div>
+    </>
   )
 }
