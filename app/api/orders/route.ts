@@ -70,6 +70,7 @@ export async function POST(request: NextRequest) {
         .insert({
           name: `${body.customer_name}'s Location`,
           address: body.delivery_address,
+          phone: body.contact_number,
           status: "active",
           country: "Philippines",
         })
