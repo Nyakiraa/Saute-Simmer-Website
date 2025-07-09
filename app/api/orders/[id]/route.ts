@@ -1,71 +1,77 @@
 import { type NextRequest, NextResponse } from "next/server"
 import { createServerClient } from "@/lib/supabase"
 
-export async function GET(request: NextRequest, context: { params: Promise<{ id: string }> }) {
+export async function GET(request: NextRequest, context: { params: { id: string } }) {
   try {
-    const { id } = await context.params
+    const { id } = context.params
     const supabase = createServerClient()
 
-    const { data: payment, error } = await supabase.from("payments").select("*").eq("id", Number.parseInt(id)).single()
+    const { data: order, error } = await supabase.from("orders").select("*").eq("id", Number.parseInt(id)).single()
 
     if (error) {
       if (error.code === "PGRST116") {
-        return NextResponse.json({ error: "Payment not found" }, { status: 404 })
+        return NextResponse.json({ error: "Order not found" }, { status: 404 })
       }
-      console.error("Error fetching payment:", error)
-      return NextResponse.json({ error: "Failed to fetch payment" }, { status: 500 })
+      console.error("Error fetching order:", error)
+      return NextResponse.json({ error: "Failed to fetch order" }, { status: 500 })
     }
 
-    return NextResponse.json(payment)
+    return NextResponse.json(order)
   } catch (error) {
     console.error("Error:", error)
-    return NextResponse.json({ error: "Failed to fetch payment" }, { status: 500 })
+    return NextResponse.json({ error: "Failed to fetch order" }, { status: 500 })
   }
 }
 
-export async function PUT(request: NextRequest, context: { params: Promise<{ id: string }> }) {
+export async function PUT(request: NextRequest, context: { params: { id: string } }) {
   try {
-    const { id } = await context.params
+    const { id } = context.params
     const body = await request.json()
     const supabase = createServerClient()
 
-    const { data: payment, error } = await supabase
-      .from("payments")
-      .update(body)
+    // Add updated_at timestamp to the update data
+    const updateData = {
+      ...body,
+      updated_at: new Date().toISOString(),
+    }
+
+    const { data: order, error } = await supabase
+      .from("orders")
+      .update(updateData)
       .eq("id", Number.parseInt(id))
       .select()
       .single()
 
     if (error) {
       if (error.code === "PGRST116") {
-        return NextResponse.json({ error: "Payment not found" }, { status: 404 })
+        return NextResponse.json({ error: "Order not found" }, { status: 404 })
       }
-      console.error("Error updating payment:", error)
-      return NextResponse.json({ error: "Failed to update payment" }, { status: 500 })
+      console.error("Error updating order:", error)
+      return NextResponse.json({ error: "Failed to update order" }, { status: 500 })
     }
 
-    return NextResponse.json(payment)
+    return NextResponse.json(order)
   } catch (error) {
     console.error("Error:", error)
-    return NextResponse.json({ error: "Failed to update payment" }, { status: 500 })
+    return NextResponse.json({ error: "Failed to update order" }, { status: 500 })
   }
 }
 
-export async function DELETE(request: NextRequest, context: { params: Promise<{ id: string }> }) {
+export async function DELETE(request: NextRequest, context: { params: { id: string } }) {
   try {
-    const { id } = await context.params
+    const { id } = context.params
     const supabase = createServerClient()
 
-    const { error } = await supabase.from("payments").delete().eq("id", Number.parseInt(id))
+    const { error } = await supabase.from("orders").delete().eq("id", Number.parseInt(id))
 
     if (error) {
-      console.error("Error deleting payment:", error)
-      return NextResponse.json({ error: "Failed to delete payment" }, { status: 500 })
+      console.error("Error deleting order:", error)
+      return NextResponse.json({ error: "Failed to delete order" }, { status: 500 })
     }
 
-    return NextResponse.json({ message: "Payment deleted successfully" })
+    return NextResponse.json({ message: "Order deleted successfully" })
   } catch (error) {
     console.error("Error:", error)
-    return NextResponse.json({ error: "Failed to delete payment" }, { status: 500 })
+    return NextResponse.json({ error: "Failed to delete order" }, { status: 500 })
   }
 }
