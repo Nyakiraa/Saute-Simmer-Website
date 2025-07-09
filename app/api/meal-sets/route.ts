@@ -25,17 +25,36 @@ export async function GET() {
 
 export async function POST(request: NextRequest) {
   try {
-    const supabase = createServerClient()
     const body = await request.json()
+    const supabase = createServerClient()
 
-    const { data, error } = await supabase.from("meal_sets").insert([body]).select().single()
+    // Validate required fields
+    const { name, type, price } = body
 
-    if (error) {
-      console.error("Database error:", error)
+    if (!name || !type || !price) {
+      return NextResponse.json({ error: "Missing required fields: name, type, price" }, { status: 400 })
+    }
+
+    // Insert the meal set
+    const { data: mealSet, error: mealSetError } = await supabase
+      .from("meal_sets")
+      .insert({
+        name,
+        type,
+        price: Number(price),
+        description: body.description || null,
+        comment: body.comment || null,
+        items: body.items || null,
+      })
+      .select()
+      .single()
+
+    if (mealSetError) {
+      console.error("Meal set creation error:", mealSetError)
       return NextResponse.json({ error: "Failed to create meal set" }, { status: 500 })
     }
 
-    return NextResponse.json(data, { status: 201 })
+    return NextResponse.json(mealSet, { status: 201 })
   } catch (error) {
     console.error("Server error:", error)
     return NextResponse.json({ error: "Internal server error" }, { status: 500 })
