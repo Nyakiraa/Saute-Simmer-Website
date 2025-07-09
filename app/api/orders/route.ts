@@ -5,43 +5,14 @@ export async function GET() {
   try {
     const supabase = createServerClient()
 
-    const { data: orders, error } = await supabase
-      .from("orders")
-      .select(`
-        *,
-        customers (
-          id,
-          name,
-          email,
-          phone
-        ),
-        meal_sets (
-          id,
-          name,
-          type,
-          price
-        )
-      `)
-      .order("created_at", { ascending: false })
+    const { data: orders, error } = await supabase.from("orders").select("*").order("created_at", { ascending: false })
 
     if (error) {
       console.error("Database error:", error)
       return NextResponse.json({ error: "Failed to fetch orders" }, { status: 500 })
     }
 
-    // Transform the data to flatten the relationships
-    const transformedOrders =
-      orders?.map((order) => ({
-        ...order,
-        customer_name: order.customers?.name || "Unknown Customer",
-        customer_email: order.customers?.email || "",
-        customer_phone: order.customers?.phone || "",
-        meal_set_name: order.meal_sets?.name || null,
-        meal_set_type: order.meal_sets?.type || null,
-        meal_set_price: order.meal_sets?.price || null,
-      })) || []
-
-    return NextResponse.json(transformedOrders)
+    return NextResponse.json(orders || [])
   } catch (error) {
     console.error("Server error:", error)
     return NextResponse.json({ error: "Internal server error" }, { status: 500 })
@@ -54,44 +25,38 @@ export async function POST(request: NextRequest) {
     const supabase = createServerClient()
 
     // Validate required fields
-    const { customer_id, meal_set_id, total_amount, delivery_date, delivery_time, location, guest_count } = body
+    const { customer_name, total_amount } = body
 
-    if (!customer_id || !meal_set_id || !total_amount) {
-      return NextResponse.json(
-        { error: "Missing required fields: customer_id, meal_set_id, total_amount" },
-        { status: 400 },
-      )
+    if (!customer_name || !total_amount) {
+      return NextResponse.json({ error: "Missing required fields: customer_name, total_amount" }, { status: 400 })
     }
 
     // Insert the order
     const { data: order, error: orderError } = await supabase
       .from("orders")
       .insert({
-        customer_id,
-        meal_set_id,
+        customer_id: body.customer_id || null,
+        customer_name,
+        items: body.items || [],
         total_amount,
-        delivery_date,
-        delivery_time,
-        location,
-        guest_count,
+        status: body.status || "pending",
+        order_date: body.order_date || new Date().toISOString().split("T")[0],
+        delivery_date: body.delivery_date || null,
+        delivery_address: body.delivery_address || null,
+        special_instructions: body.special_instructions || null,
+        payment_method: body.payment_method || null,
+        customer_email: body.customer_email || null,
+        order_type: body.order_type || "meal_set",
+        meal_set_id: body.meal_set_id || null,
+        meal_set_name: body.meal_set_name || null,
+        event_type: body.event_type || null,
+        event_date: body.event_date || null,
+        contact_person: body.contact_person || null,
+        contact_number: body.contact_number || null,
         special_requests: body.special_requests || null,
-        status: "pending",
+        quantity: body.quantity || 1,
       })
-      .select(`
-        *,
-        customers (
-          id,
-          name,
-          email,
-          phone
-        ),
-        meal_sets (
-          id,
-          name,
-          type,
-          price
-        )
-      `)
+      .select()
       .single()
 
     if (orderError) {
@@ -99,34 +64,7 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: "Failed to create order" }, { status: 500 })
     }
 
-    // Create corresponding payment record
-    const { error: paymentError } = await supabase.from("payments").insert({
-      order_id: order.id,
-      customer_id: customer_id,
-      amount: total_amount,
-      payment_method: body.payment_method || "pending",
-      status: "pending",
-      payment_date: new Date().toISOString().split("T")[0],
-      notes: `Payment for Order #${order.id}`,
-    })
-
-    if (paymentError) {
-      console.error("Payment creation error:", paymentError)
-      // Don't fail the order creation if payment record fails
-    }
-
-    // Transform the response
-    const transformedOrder = {
-      ...order,
-      customer_name: order.customers?.name || "Unknown Customer",
-      customer_email: order.customers?.email || "",
-      customer_phone: order.customers?.phone || "",
-      meal_set_name: order.meal_sets?.name || null,
-      meal_set_type: order.meal_sets?.type || null,
-      meal_set_price: order.meal_sets?.price || null,
-    }
-
-    return NextResponse.json(transformedOrder, { status: 201 })
+    return NextResponse.json(order, { status: 201 })
   } catch (error) {
     console.error("Server error:", error)
     return NextResponse.json({ error: "Internal server error" }, { status: 500 })
