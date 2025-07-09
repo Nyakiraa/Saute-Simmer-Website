@@ -8,7 +8,6 @@ export async function GET() {
     const { data: items, error } = await supabase
       .from("items")
       .select("*")
-      .eq("status", "available")
       .order("category", { ascending: true })
       .order("name", { ascending: true })
 
