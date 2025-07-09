@@ -363,7 +363,8 @@ function AdminDashboard() {
         })
       } else if (typeof data === "object" && data !== null) {
         // Handle the specific structure: {"snack":[{...}],"main":[],"side":[],"beverage":[]}
-        Object.values(data).forEach((categoryItems: any) => {
+        // This handles both simple arrays and complex objects with full item details
+        Object.entries(data).forEach(([category, categoryItems]: [string, any]) => {
           if (Array.isArray(categoryItems)) {
             categoryItems.forEach((item: any) => {
               if (typeof item === "object" && item !== null && item.name) {
