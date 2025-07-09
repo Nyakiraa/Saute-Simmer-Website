@@ -2,20 +2,43 @@
 
 import type React from "react"
 import { useState, useEffect } from "react"
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
-import { Label } from "@/components/ui/label"
-import { Textarea } from "@/components/ui/textarea"
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
-import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog"
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
 import { Badge } from "@/components/ui/badge"
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
-import { Edit, Search, Users, Package, Utensils, MapPin, CreditCard, ShoppingCart, Layers, LogOut } from "lucide-react"
-import { toast } from "sonner"
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+  DialogTrigger,
+} from "@/components/ui/dialog"
+import { Label } from "@/components/ui/label"
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
+import { Textarea } from "@/components/ui/textarea"
+import {
+  Search,
+  Plus,
+  Edit,
+  Trash2,
+  LogOut,
+  BarChart3,
+  Users,
+  Package,
+  Utensils,
+  MapPin,
+  CreditCard,
+} from "lucide-react"
+import { useRouter } from "next/navigation"
+import { createClient } from "@supabase/supabase-js"
 import AdminAuthWrapper from "@/components/admin-auth-wrapper"
-import { signOut } from "@/lib/supabase-auth"
+import { toast } from "react-hot-toast"
+
+const supabase = createClient(process.env.NEXT_PUBLIC_SUPABASE_URL!, process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!)
 
 // Types matching your actual database schema
 interface Customer {
@@ -23,70 +46,59 @@ interface Customer {
   name: string
   email: string
   phone: string
-  address: string
   created_at: string
 }
 
 interface Item {
   id: number
   name: string
-  category: string
-  price: number
   description: string
-  status: string
+  price: number
+  category: string
+  available: boolean
   created_at: string
 }
 
 interface MealSet {
   id: number
   name: string
-  type: string
-  price: number
   description: string
-  items: string
-  comment?: string
+  price: number
+  items: string[]
+  available: boolean
   created_at: string
 }
 
 interface CateringService {
   id: number
-  customer_id: number
   customer_name: string
   event_type: string
   event_date: string
   guest_count: number
   status: string
   location: string
-  special_requests?: string
   created_at: string
-  order_id?: number
-  location_id?: number
-  payment_method?: string
 }
 
 interface Location {
   id: number
   name: string
   address: string
-  phone?: string
+  phone: string
   status: string
-  created_at: string
-  state?: string
-  zip_code?: string
+  state: string
+  zip_code: string
   country: string
+  created_at: string
 }
 
 interface Payment {
   id: number
-  customer_id: number
-  customer_name: string
+  order_id: number
   amount: number
-  transaction_id?: string
-  payment_date: string
-  created_at: string
-  order_id?: number
-  payment_method?: string
+  payment_method: string
   status: string
+  created_at: string
 }
 
 interface Order {
@@ -115,8 +127,8 @@ interface Order {
 }
 
 function AdminDashboard() {
-  // State management
-  const [activeTab, setActiveTab] = useState("overview")
+  const router = useRouter()
+  const [searchTerm, setSearchTerm] = useState("")
   const [customers, setCustomers] = useState<Customer[]>([])
   const [items, setItems] = useState<Item[]>([])
   const [mealSets, setMealSets] = useState<MealSet[]>([])
@@ -124,7 +136,7 @@ function AdminDashboard() {
   const [locations, setLocations] = useState<Location[]>([])
   const [payments, setPayments] = useState<Payment[]>([])
   const [orders, setOrders] = useState<Order[]>([])
-  const [searchTerm, setSearchTerm] = useState("")
+  const [loading, setLoading] = useState(true)
   const [isLoading, setIsLoading] = useState(false)
 
   // Modal states
@@ -136,49 +148,59 @@ function AdminDashboard() {
   const [isPaymentModalOpen, setIsPaymentModalOpen] = useState(false)
 
   // Form states
+  const [newCustomer, setNewCustomer] = useState({ name: "", email: "", phone: "" })
+  const [newItem, setNewItem] = useState({ name: "", description: "", price: 0, category: "", available: true })
+  const [newMealSet, setNewMealSet] = useState({ name: "", description: "", price: 0, items: [], available: true })
+  const [newCateringService, setNewCateringService] = useState({
+    customer_name: "",
+    event_type: "",
+    event_date: "",
+    guest_count: 0,
+    status: "pending",
+    location: "",
+  })
+  const [newLocation, setNewLocation] = useState({
+    name: "",
+    address: "",
+    phone: "",
+    status: "active",
+    state: "",
+    zip_code: "",
+    country: "USA",
+  })
   const [editingCustomer, setEditingCustomer] = useState<Customer | null>(null)
   const [editingItem, setEditingItem] = useState<Item | null>(null)
   const [editingMealSet, setEditingMealSet] = useState<MealSet | null>(null)
   const [editingCatering, setEditingCatering] = useState<CateringService | null>(null)
   const [editingLocation, setEditingLocation] = useState<Location | null>(null)
   const [editingPayment, setEditingPayment] = useState<Payment | null>(null)
+  const [activeTab, setActiveTab] = useState("overview")
 
   // Load data on component mount
   useEffect(() => {
-    loadAllData()
+    fetchAllData()
   }, [])
 
-  const handleLogout = async () => {
-    try {
-      await signOut()
-      window.location.href = "/login?message=logout-success"
-    } catch (error) {
-      console.error("Logout error:", error)
-      toast.error("Failed to logout")
-    }
-  }
-
-  const loadAllData = async () => {
-    setIsLoading(true)
+  const fetchAllData = async () => {
+    setLoading(true)
     try {
       await Promise.all([
-        loadCustomers(),
-        loadItems(),
-        loadMealSets(),
-        loadCateringServices(),
-        loadLocations(),
-        loadPayments(),
+        fetchCustomers(),
+        fetchItems(),
+        fetchMealSets(),
+        fetchCateringServices(),
+        fetchLocations(),
+        fetchPayments(),
         loadOrders(),
       ])
     } catch (error) {
-      console.error("Error loading data:", error)
-      toast.error("Failed to load data")
+      console.error("Error fetching data:", error)
     } finally {
-      setIsLoading(false)
+      setLoading(false)
     }
   }
 
-  const loadCustomers = async () => {
+  const fetchCustomers = async () => {
     try {
       const response = await fetch("/api/customers")
       if (response.ok) {
@@ -186,11 +208,11 @@ function AdminDashboard() {
         setCustomers(data)
       }
     } catch (error) {
-      console.error("Error loading customers:", error)
+      console.error("Error fetching customers:", error)
     }
   }
 
-  const loadItems = async () => {
+  const fetchItems = async () => {
     try {
       const response = await fetch("/api/items")
       if (response.ok) {
@@ -198,11 +220,11 @@ function AdminDashboard() {
         setItems(data)
       }
     } catch (error) {
-      console.error("Error loading items:", error)
+      console.error("Error fetching items:", error)
     }
   }
 
-  const loadMealSets = async () => {
+  const fetchMealSets = async () => {
     try {
       const response = await fetch("/api/meal-sets")
       if (response.ok) {
@@ -210,11 +232,11 @@ function AdminDashboard() {
         setMealSets(data)
       }
     } catch (error) {
-      console.error("Error loading meal sets:", error)
+      console.error("Error fetching meal sets:", error)
     }
   }
 
-  const loadCateringServices = async () => {
+  const fetchCateringServices = async () => {
     try {
       const response = await fetch("/api/catering-services")
       if (response.ok) {
@@ -222,11 +244,11 @@ function AdminDashboard() {
         setCateringServices(data)
       }
     } catch (error) {
-      console.error("Error loading catering services:", error)
+      console.error("Error fetching catering services:", error)
     }
   }
 
-  const loadLocations = async () => {
+  const fetchLocations = async () => {
     try {
       const response = await fetch("/api/locations")
       if (response.ok) {
@@ -234,11 +256,11 @@ function AdminDashboard() {
         setLocations(data)
       }
     } catch (error) {
-      console.error("Error loading locations:", error)
+      console.error("Error fetching locations:", error)
     }
   }
 
-  const loadPayments = async () => {
+  const fetchPayments = async () => {
     try {
       const response = await fetch("/api/payments")
       if (response.ok) {
@@ -246,7 +268,7 @@ function AdminDashboard() {
         setPayments(data)
       }
     } catch (error) {
-      console.error("Error loading payments:", error)
+      console.error("Error fetching payments:", error)
     }
   }
 
@@ -262,6 +284,138 @@ function AdminDashboard() {
     }
   }
 
+  const handleLogout = async () => {
+    await supabase.auth.signOut()
+    router.push("/login")
+  }
+
+  const addCustomer = async () => {
+    try {
+      const response = await fetch("/api/customers", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(newCustomer),
+      })
+      if (response.ok) {
+        fetchCustomers()
+        setNewCustomer({ name: "", email: "", phone: "" })
+      }
+    } catch (error) {
+      console.error("Error adding customer:", error)
+    }
+  }
+
+  const addItem = async () => {
+    try {
+      const response = await fetch("/api/items", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(newItem),
+      })
+      if (response.ok) {
+        fetchItems()
+        setNewItem({ name: "", description: "", price: 0, category: "", available: true })
+      }
+    } catch (error) {
+      console.error("Error adding item:", error)
+    }
+  }
+
+  const addMealSet = async () => {
+    try {
+      const response = await fetch("/api/meal-sets", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(newMealSet),
+      })
+      if (response.ok) {
+        fetchMealSets()
+        setNewMealSet({ name: "", description: "", price: 0, items: [], available: true })
+      }
+    } catch (error) {
+      console.error("Error adding meal set:", error)
+    }
+  }
+
+  const addCateringService = async () => {
+    try {
+      const response = await fetch("/api/catering-services", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(newCateringService),
+      })
+      if (response.ok) {
+        fetchCateringServices()
+        setNewCateringService({
+          customer_name: "",
+          event_type: "",
+          event_date: "",
+          guest_count: 0,
+          status: "pending",
+          location: "",
+        })
+      }
+    } catch (error) {
+      console.error("Error adding catering service:", error)
+    }
+  }
+
+  const addLocation = async () => {
+    try {
+      const response = await fetch("/api/locations", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(newLocation),
+      })
+      if (response.ok) {
+        fetchLocations()
+        setNewLocation({
+          name: "",
+          address: "",
+          phone: "",
+          status: "active",
+          state: "",
+          zip_code: "",
+          country: "USA",
+        })
+      }
+    } catch (error) {
+      console.error("Error adding location:", error)
+    }
+  }
+
+  const deleteItem = async (id: number, type: string) => {
+    try {
+      const response = await fetch(`/api/${type}/${id}`, {
+        method: "DELETE",
+      })
+      if (response.ok) {
+        switch (type) {
+          case "customers":
+            fetchCustomers()
+            break
+          case "items":
+            fetchItems()
+            break
+          case "meal-sets":
+            fetchMealSets()
+            break
+          case "catering-services":
+            fetchCateringServices()
+            break
+          case "locations":
+            fetchLocations()
+            break
+          case "payments":
+            fetchPayments()
+            break
+        }
+      }
+    } catch (error) {
+      console.error(`Error deleting ${type}:`, error)
+    }
+  }
+
   // CRUD Operations for Customers
   const handleSaveCustomer = async (customerData: Omit<Customer, "id" | "created_at">) => {
     try {
@@ -273,7 +427,7 @@ function AdminDashboard() {
         })
         if (response.ok) {
           toast.success("Customer updated successfully")
-          await loadCustomers()
+          await fetchCustomers()
         } else {
           throw new Error("Failed to update customer")
         }
@@ -297,7 +451,7 @@ function AdminDashboard() {
         })
         if (response.ok) {
           toast.success("Item updated successfully")
-          await loadItems()
+          await fetchItems()
         } else {
           throw new Error("Failed to update item")
         }
@@ -321,7 +475,7 @@ function AdminDashboard() {
         })
         if (response.ok) {
           toast.success("Meal set updated successfully")
-          await loadMealSets()
+          await fetchMealSets()
         } else {
           throw new Error("Failed to update meal set")
         }
@@ -345,7 +499,7 @@ function AdminDashboard() {
         })
         if (response.ok) {
           toast.success("Catering service updated successfully")
-          await loadCateringServices()
+          await fetchCateringServices()
         } else {
           throw new Error("Failed to update catering service")
         }
@@ -369,7 +523,7 @@ function AdminDashboard() {
         })
         if (response.ok) {
           toast.success("Location updated successfully")
-          await loadLocations()
+          await fetchLocations()
         } else {
           throw new Error("Failed to update location")
         }
@@ -393,7 +547,7 @@ function AdminDashboard() {
         })
         if (response.ok) {
           toast.success("Payment updated successfully")
-          await loadPayments()
+          await fetchPayments()
         } else {
           throw new Error("Failed to update payment")
         }
@@ -437,10 +591,8 @@ function AdminDashboard() {
       location.address?.toLowerCase().includes(searchTerm.toLowerCase()),
   )
 
-  const filteredPayments = payments.filter(
-    (payment) =>
-      payment.customer_name?.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      payment.payment_method?.toLowerCase().includes(searchTerm.toLowerCase()),
+  const filteredPayments = payments.filter((payment) =>
+    payment.payment_method?.toLowerCase().includes(searchTerm.toLowerCase()),
   )
 
   const filteredOrders = orders.filter(
@@ -502,38 +654,37 @@ function AdminDashboard() {
   // Use the higher of the two calculations for more accurate revenue
   const actualRevenue = Math.max(totalRevenue, paidRevenue)
 
-  if (isLoading) {
+  if (loading) {
     return (
-      <div className="min-h-screen bg-gradient-to-br from-red-50 to-orange-50 flex items-center justify-center">
-        <div className="text-center">
-          <div className="animate-spin rounded-full h-32 w-32 border-b-2 border-red-600 mx-auto mb-4"></div>
-          <p className="text-lg text-gray-600">Loading dashboard...</p>
-        </div>
+      <div className="flex items-center justify-center min-h-screen">
+        <div className="text-lg">Loading...</div>
       </div>
     )
   }
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-red-50 to-orange-50">
-      <div className="container mx-auto p-6">
-        {/* Header */}
-        <div className="mb-8 flex items-center justify-between">
-          <div className="flex items-center gap-4">
-            <img src="/images/redlogo.png" alt="Saute and Simmer Logo" className="h-12 w-auto object-contain" />
-            <div>
-              <h1 className="text-4xl font-bold text-red-800 mb-2">Admin Dashboard</h1>
-              <p className="text-gray-600">Comprehensive catering management system</p>
+    <div className="min-h-screen bg-gray-50">
+      <header className="bg-white shadow-sm border-b">
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+          <div className="flex justify-between items-center py-6">
+            <div className="flex items-center">
+              <img src="/images/redlogo.png" alt="Sauté & Simmer" className="h-12 w-auto mr-4" />
+              <div>
+                <h1 className="text-3xl font-bold text-gray-900">Admin Dashboard</h1>
+                <p className="text-gray-600">Comprehensive catering management system</p>
+              </div>
             </div>
+            <Button onClick={handleLogout} variant="outline" className="flex items-center gap-2 bg-transparent">
+              <LogOut className="h-4 w-4" />
+              Logout
+            </Button>
           </div>
-          <Button variant="outline" onClick={handleLogout} className="flex items-center gap-2 bg-transparent">
-            <LogOut className="h-4 w-4" />
-            Logout
-          </Button>
         </div>
+      </header>
 
-        {/* Search Bar */}
-        <div className="mb-6">
-          <div className="relative max-w-md">
+      <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+        <div className="mb-8">
+          <div className="relative">
             <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 h-4 w-4" />
             <Input
               placeholder="Search across all data..."
@@ -544,11 +695,10 @@ function AdminDashboard() {
           </div>
         </div>
 
-        {/* Main Tabs */}
-        <Tabs value={activeTab} onValueChange={setActiveTab} className="space-y-6">
+        <Tabs defaultValue="overview" className="space-y-4">
           <TabsList className="grid w-full grid-cols-7">
             <TabsTrigger value="overview" className="flex items-center gap-2">
-              <ShoppingCart className="h-4 w-4" />
+              <BarChart3 className="h-4 w-4" />
               Overview
             </TabsTrigger>
             <TabsTrigger value="customers" className="flex items-center gap-2">
@@ -560,7 +710,7 @@ function AdminDashboard() {
               Items
             </TabsTrigger>
             <TabsTrigger value="sets" className="flex items-center gap-2">
-              <Layers className="h-4 w-4" />
+              <Utensils className="h-4 w-4" />
               Sets
             </TabsTrigger>
             <TabsTrigger value="catering" className="flex items-center gap-2">
@@ -577,9 +727,8 @@ function AdminDashboard() {
             </TabsTrigger>
           </TabsList>
 
-          {/* Overview Tab */}
-          <TabsContent value="overview" className="space-y-6">
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
+          <TabsContent value="overview" className="space-y-4">
+            <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
               <Card>
                 <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
                   <CardTitle className="text-sm font-medium">Total Customers</CardTitle>
@@ -587,7 +736,6 @@ function AdminDashboard() {
                 </CardHeader>
                 <CardContent>
                   <div className="text-2xl font-bold">{customers.length}</div>
-                  <p className="text-xs text-muted-foreground">Registered users</p>
                 </CardContent>
               </Card>
               <Card>
@@ -597,304 +745,379 @@ function AdminDashboard() {
                 </CardHeader>
                 <CardContent>
                   <div className="text-2xl font-bold">{items.length}</div>
-                  <p className="text-xs text-muted-foreground">Available items</p>
                 </CardContent>
               </Card>
               <Card>
                 <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-                  <CardTitle className="text-sm font-medium">Active Orders</CardTitle>
-                  <ShoppingCart className="h-4 w-4 text-muted-foreground" />
+                  <CardTitle className="text-sm font-medium">Catering Events</CardTitle>
+                  <Utensils className="h-4 w-4 text-muted-foreground" />
                 </CardHeader>
                 <CardContent>
-                  <div className="text-2xl font-bold">
-                    {orders.filter((o) => o.status !== "cancelled" && o.status !== "delivered").length}
-                  </div>
-                  <p className="text-xs text-muted-foreground">Orders in progress</p>
+                  <div className="text-2xl font-bold">{cateringServices.length}</div>
                 </CardContent>
               </Card>
               <Card>
                 <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-                  <CardTitle className="text-sm font-medium">Total Revenue</CardTitle>
-                  <CreditCard className="h-4 w-4 text-muted-foreground" />
+                  <CardTitle className="text-sm font-medium">Locations</CardTitle>
+                  <MapPin className="h-4 w-4 text-muted-foreground" />
                 </CardHeader>
                 <CardContent>
-                  <div className="text-2xl font-bold text-green-600">{formatCurrency(actualRevenue)}</div>
-                  <p className="text-xs text-muted-foreground">
-                    From {orders.filter((o) => o.status !== "cancelled").length} orders
-                  </p>
+                  <div className="text-2xl font-bold">{locations.length}</div>
                 </CardContent>
               </Card>
             </div>
-
-            {/* Recent Orders */}
-            <Card>
-              <CardHeader>
-                <CardTitle>Recent Orders</CardTitle>
-              </CardHeader>
-              <CardContent>
-                {orders.length === 0 ? (
-                  <div className="text-center py-8 text-gray-500">
-                    <p>No orders found</p>
-                    <p className="text-sm">Orders will appear here once customers start placing them</p>
-                  </div>
-                ) : (
-                  <Table>
-                    <TableHeader>
-                      <TableRow>
-                        <TableHead>Order ID</TableHead>
-                        <TableHead>Customer</TableHead>
-                        <TableHead>Type</TableHead>
-                        <TableHead>Amount</TableHead>
-                        <TableHead>Status</TableHead>
-                        <TableHead>Date</TableHead>
-                      </TableRow>
-                    </TableHeader>
-                    <TableBody>
-                      {orders
-                        .sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime())
-                        .slice(0, 10)
-                        .map((order) => (
-                          <TableRow key={order.id}>
-                            <TableCell className="font-medium">#{order.id}</TableCell>
-                            <TableCell>
-                              <div>
-                                <div className="font-medium">{order.customer_name}</div>
-                                <div className="text-sm text-gray-500">{order.customer_email}</div>
-                              </div>
-                            </TableCell>
-                            <TableCell>
-                              <div>
-                                <div className="font-medium">{order.meal_set_name || order.order_type}</div>
-                                <div className="text-sm text-gray-500">Qty: {order.quantity}</div>
-                              </div>
-                            </TableCell>
-                            <TableCell className="font-medium text-green-600">
-                              {formatCurrency(order.total_amount)}
-                            </TableCell>
-                            <TableCell>
-                              <Badge variant={getStatusBadgeVariant(order.status)} className="capitalize">
-                                {order.status}
-                              </Badge>
-                            </TableCell>
-                            <TableCell className="text-sm">{formatDate(order.created_at)}</TableCell>
-                          </TableRow>
-                        ))}
-                    </TableBody>
-                  </Table>
-                )}
-              </CardContent>
-            </Card>
           </TabsContent>
 
-          {/* Customers Tab */}
-          <TabsContent value="customers" className="space-y-6">
-            <div className="flex justify-between items-center">
-              <h2 className="text-2xl font-bold">Customer Management</h2>
-            </div>
+          <TabsContent value="customers" className="space-y-4">
             <Card>
-              <CardContent className="p-6">
+              <CardHeader>
+                <div className="flex justify-between items-center">
+                  <div>
+                    <CardTitle>Customer Management</CardTitle>
+                    <CardDescription>Manage your customer database</CardDescription>
+                  </div>
+                  <Dialog>
+                    <DialogTrigger asChild>
+                      <Button className="flex items-center gap-2">
+                        <Plus className="h-4 w-4" />
+                        Add Customer
+                      </Button>
+                    </DialogTrigger>
+                    <DialogContent>
+                      <DialogHeader>
+                        <DialogTitle>Add New Customer</DialogTitle>
+                        <DialogDescription>Enter customer details below</DialogDescription>
+                      </DialogHeader>
+                      <div className="grid gap-4 py-4">
+                        <div className="grid grid-cols-4 items-center gap-4">
+                          <Label htmlFor="name" className="text-right">
+                            Name
+                          </Label>
+                          <Input
+                            id="name"
+                            value={newCustomer.name}
+                            onChange={(e) => setNewCustomer({ ...newCustomer, name: e.target.value })}
+                            className="col-span-3"
+                          />
+                        </div>
+                        <div className="grid grid-cols-4 items-center gap-4">
+                          <Label htmlFor="email" className="text-right">
+                            Email
+                          </Label>
+                          <Input
+                            id="email"
+                            type="email"
+                            value={newCustomer.email}
+                            onChange={(e) => setNewCustomer({ ...newCustomer, email: e.target.value })}
+                            className="col-span-3"
+                          />
+                        </div>
+                        <div className="grid grid-cols-4 items-center gap-4">
+                          <Label htmlFor="phone" className="text-right">
+                            Phone
+                          </Label>
+                          <Input
+                            id="phone"
+                            value={newCustomer.phone}
+                            onChange={(e) => setNewCustomer({ ...newCustomer, phone: e.target.value })}
+                            className="col-span-3"
+                          />
+                        </div>
+                      </div>
+                      <DialogFooter>
+                        <Button onClick={addCustomer}>Add Customer</Button>
+                      </DialogFooter>
+                    </DialogContent>
+                  </Dialog>
+                </div>
+              </CardHeader>
+              <CardContent>
                 <Table>
                   <TableHeader>
                     <TableRow>
                       <TableHead>Name</TableHead>
                       <TableHead>Email</TableHead>
                       <TableHead>Phone</TableHead>
-                      <TableHead>Address</TableHead>
                       <TableHead>Joined</TableHead>
                       <TableHead>Actions</TableHead>
                     </TableRow>
                   </TableHeader>
                   <TableBody>
-                    {filteredCustomers.map((customer) => (
-                      <TableRow key={customer.id}>
-                        <TableCell>{customer.name}</TableCell>
-                        <TableCell>{customer.email}</TableCell>
-                        <TableCell>{customer.phone}</TableCell>
-                        <TableCell>{customer.address}</TableCell>
-                        <TableCell>{formatDate(customer.created_at)}</TableCell>
-                        <TableCell>
-                          <Dialog
-                            open={isCustomerModalOpen && editingCustomer?.id === customer.id}
-                            onOpenChange={(open) => {
-                              setIsCustomerModalOpen(open)
-                              if (!open) setEditingCustomer(null)
-                            }}
-                          >
-                            <DialogTrigger asChild>
-                              <Button
-                                variant="outline"
-                                size="sm"
-                                onClick={() => {
-                                  setEditingCustomer(customer)
-                                  setIsCustomerModalOpen(true)
-                                }}
-                              >
+                    {customers
+                      .filter(
+                        (customer) =>
+                          customer.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
+                          customer.email.toLowerCase().includes(searchTerm.toLowerCase()),
+                      )
+                      .map((customer) => (
+                        <TableRow key={customer.id}>
+                          <TableCell className="font-medium">{customer.name}</TableCell>
+                          <TableCell>{customer.email}</TableCell>
+                          <TableCell>{customer.phone}</TableCell>
+                          <TableCell>{new Date(customer.created_at).toLocaleDateString()}</TableCell>
+                          <TableCell>
+                            <div className="flex items-center gap-2">
+                              <Button variant="outline" size="sm">
                                 <Edit className="h-4 w-4" />
                               </Button>
-                            </DialogTrigger>
-                            <DialogContent>
-                              <DialogHeader>
-                                <DialogTitle>Edit Customer</DialogTitle>
-                              </DialogHeader>
-                              <CustomerForm
-                                customer={editingCustomer}
-                                onSave={handleSaveCustomer}
-                                onCancel={() => {
-                                  setIsCustomerModalOpen(false)
-                                  setEditingCustomer(null)
-                                }}
-                              />
-                            </DialogContent>
-                          </Dialog>
-                        </TableCell>
-                      </TableRow>
-                    ))}
+                              <Button variant="outline" size="sm" onClick={() => deleteItem(customer.id, "customers")}>
+                                <Trash2 className="h-4 w-4" />
+                              </Button>
+                            </div>
+                          </TableCell>
+                        </TableRow>
+                      ))}
                   </TableBody>
                 </Table>
               </CardContent>
             </Card>
           </TabsContent>
 
-          {/* Items Tab */}
-          <TabsContent value="items" className="space-y-6">
-            <div className="flex justify-between items-center">
-              <h2 className="text-2xl font-bold">Item Management</h2>
-            </div>
+          <TabsContent value="locations" className="space-y-4">
             <Card>
-              <CardContent className="p-6">
+              <CardHeader>
+                <div className="flex justify-between items-center">
+                  <div>
+                    <CardTitle>Location Management</CardTitle>
+                    <CardDescription>Manage delivery and event locations</CardDescription>
+                  </div>
+                  <Dialog>
+                    <DialogTrigger asChild>
+                      <Button className="flex items-center gap-2">
+                        <Plus className="h-4 w-4" />
+                        Add Location
+                      </Button>
+                    </DialogTrigger>
+                    <DialogContent>
+                      <DialogHeader>
+                        <DialogTitle>Add New Location</DialogTitle>
+                        <DialogDescription>Enter location details below</DialogDescription>
+                      </DialogHeader>
+                      <div className="grid gap-4 py-4">
+                        <div className="grid grid-cols-4 items-center gap-4">
+                          <Label htmlFor="location-name" className="text-right">
+                            Name
+                          </Label>
+                          <Input
+                            id="location-name"
+                            value={newLocation.name}
+                            onChange={(e) => setNewLocation({ ...newLocation, name: e.target.value })}
+                            className="col-span-3"
+                          />
+                        </div>
+                        <div className="grid grid-cols-4 items-center gap-4">
+                          <Label htmlFor="address" className="text-right">
+                            Address
+                          </Label>
+                          <Textarea
+                            id="address"
+                            value={newLocation.address}
+                            onChange={(e) => setNewLocation({ ...newLocation, address: e.target.value })}
+                            className="col-span-3"
+                          />
+                        </div>
+                        <div className="grid grid-cols-4 items-center gap-4">
+                          <Label htmlFor="location-phone" className="text-right">
+                            Phone
+                          </Label>
+                          <Input
+                            id="location-phone"
+                            value={newLocation.phone}
+                            onChange={(e) => setNewLocation({ ...newLocation, phone: e.target.value })}
+                            className="col-span-3"
+                          />
+                        </div>
+                        <div className="grid grid-cols-4 items-center gap-4">
+                          <Label htmlFor="state" className="text-right">
+                            State
+                          </Label>
+                          <Input
+                            id="state"
+                            value={newLocation.state}
+                            onChange={(e) => setNewLocation({ ...newLocation, state: e.target.value })}
+                            className="col-span-3"
+                          />
+                        </div>
+                        <div className="grid grid-cols-4 items-center gap-4">
+                          <Label htmlFor="zip" className="text-right">
+                            ZIP Code
+                          </Label>
+                          <Input
+                            id="zip"
+                            value={newLocation.zip_code}
+                            onChange={(e) => setNewLocation({ ...newLocation, zip_code: e.target.value })}
+                            className="col-span-3"
+                          />
+                        </div>
+                        <div className="grid grid-cols-4 items-center gap-4">
+                          <Label htmlFor="location-status" className="text-right">
+                            Status
+                          </Label>
+                          <Select
+                            value={newLocation.status}
+                            onValueChange={(value) => setNewLocation({ ...newLocation, status: value })}
+                          >
+                            <SelectTrigger className="col-span-3">
+                              <SelectValue />
+                            </SelectTrigger>
+                            <SelectContent>
+                              <SelectItem value="active">Active</SelectItem>
+                              <SelectItem value="inactive">Inactive</SelectItem>
+                            </SelectContent>
+                          </Select>
+                        </div>
+                      </div>
+                      <DialogFooter>
+                        <Button onClick={addLocation}>Add Location</Button>
+                      </DialogFooter>
+                    </DialogContent>
+                  </Dialog>
+                </div>
+              </CardHeader>
+              <CardContent>
                 <Table>
                   <TableHeader>
                     <TableRow>
                       <TableHead>Name</TableHead>
-                      <TableHead>Category</TableHead>
-                      <TableHead>Price</TableHead>
+                      <TableHead>Address</TableHead>
+                      <TableHead>Phone</TableHead>
                       <TableHead>Status</TableHead>
-                      <TableHead>Description</TableHead>
                       <TableHead>Actions</TableHead>
                     </TableRow>
                   </TableHeader>
                   <TableBody>
-                    {filteredItems.map((item) => (
-                      <TableRow key={item.id}>
-                        <TableCell>{item.name}</TableCell>
-                        <TableCell>
-                          <Badge variant="outline">{item.category}</Badge>
-                        </TableCell>
-                        <TableCell>{formatCurrency(item.price)}</TableCell>
-                        <TableCell>
-                          <Badge variant={getStatusBadgeVariant(item.status)}>{item.status}</Badge>
-                        </TableCell>
-                        <TableCell>{item.description}</TableCell>
-                        <TableCell>
-                          <Dialog
-                            open={isItemModalOpen && editingItem?.id === item.id}
-                            onOpenChange={(open) => {
-                              setIsItemModalOpen(open)
-                              if (!open) setEditingItem(null)
-                            }}
-                          >
-                            <DialogTrigger asChild>
-                              <Button
-                                variant="outline"
-                                size="sm"
-                                onClick={() => {
-                                  setEditingItem(item)
-                                  setIsItemModalOpen(true)
-                                }}
-                              >
+                    {locations
+                      .filter(
+                        (location) =>
+                          location.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
+                          location.address.toLowerCase().includes(searchTerm.toLowerCase()),
+                      )
+                      .map((location) => (
+                        <TableRow key={location.id}>
+                          <TableCell className="font-medium">{location.name}</TableCell>
+                          <TableCell>{location.address}</TableCell>
+                          <TableCell>{location.phone}</TableCell>
+                          <TableCell>
+                            <Badge variant={location.status === "active" ? "default" : "secondary"}>
+                              {location.status}
+                            </Badge>
+                          </TableCell>
+                          <TableCell>
+                            <div className="flex items-center gap-2">
+                              <Button variant="outline" size="sm">
                                 <Edit className="h-4 w-4" />
                               </Button>
-                            </DialogTrigger>
-                            <DialogContent>
-                              <DialogHeader>
-                                <DialogTitle>Edit Item</DialogTitle>
-                              </DialogHeader>
-                              <ItemForm
-                                item={editingItem}
-                                onSave={handleSaveItem}
-                                onCancel={() => {
-                                  setIsItemModalOpen(false)
-                                  setEditingItem(null)
-                                }}
-                              />
-                            </DialogContent>
-                          </Dialog>
-                        </TableCell>
-                      </TableRow>
-                    ))}
+                              <Button variant="outline" size="sm" onClick={() => deleteItem(location.id, "locations")}>
+                                <Trash2 className="h-4 w-4" />
+                              </Button>
+                            </div>
+                          </TableCell>
+                        </TableRow>
+                      ))}
                   </TableBody>
                 </Table>
               </CardContent>
             </Card>
           </TabsContent>
 
-          {/* Meal Sets Tab */}
-          <TabsContent value="sets" className="space-y-6">
-            <div className="flex justify-between items-center">
-              <h2 className="text-2xl font-bold">Meal Set Management</h2>
-            </div>
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-              {filteredMealSets.map((mealSet) => (
-                <Card key={mealSet.id}>
-                  <CardHeader>
-                    <div className="flex justify-between items-start">
-                      <div>
-                        <CardTitle>{mealSet.name}</CardTitle>
-                        <Badge variant={mealSet.type === "premium" ? "default" : "secondary"}>{mealSet.type}</Badge>
-                      </div>
-                      <Dialog
-                        open={isMealSetModalOpen && editingMealSet?.id === mealSet.id}
-                        onOpenChange={(open) => {
-                          setIsMealSetModalOpen(open)
-                          if (!open) setEditingMealSet(null)
-                        }}
-                      >
-                        <DialogTrigger asChild>
-                          <Button
-                            variant="outline"
-                            size="sm"
-                            onClick={() => {
-                              setEditingMealSet(mealSet)
-                              setIsMealSetModalOpen(true)
-                            }}
-                          >
-                            <Edit className="h-4 w-4" />
-                          </Button>
-                        </DialogTrigger>
-                        <DialogContent className="max-w-2xl">
-                          <DialogHeader>
-                            <DialogTitle>Edit Meal Set</DialogTitle>
-                          </DialogHeader>
-                          <MealSetForm
-                            mealSet={editingMealSet}
-                            items={items}
-                            onSave={handleSaveMealSet}
-                            onCancel={() => {
-                              setIsMealSetModalOpen(false)
-                              setEditingMealSet(null)
-                            }}
-                          />
-                        </DialogContent>
-                      </Dialog>
-                    </div>
-                  </CardHeader>
-                  <CardContent>
-                    <p className="text-sm text-gray-600 mb-4">{mealSet.description}</p>
-                    <div className="text-2xl font-bold text-red-600 mb-4">{formatCurrency(mealSet.price)}</div>
-                    {mealSet.comment && <p className="text-sm text-gray-500">{mealSet.comment}</p>}
-                  </CardContent>
-                </Card>
-              ))}
-            </div>
-          </TabsContent>
-
-          {/* Catering Services Tab */}
-          <TabsContent value="catering" className="space-y-6">
-            <div className="flex justify-between items-center">
-              <h2 className="text-2xl font-bold">Catering Services</h2>
-            </div>
+          <TabsContent value="catering" className="space-y-4">
             <Card>
-              <CardContent className="p-6">
+              <CardHeader>
+                <div className="flex justify-between items-center">
+                  <div>
+                    <CardTitle>Catering Services</CardTitle>
+                    <CardDescription>Manage catering events and bookings</CardDescription>
+                  </div>
+                  <Dialog>
+                    <DialogTrigger asChild>
+                      <Button className="flex items-center gap-2">
+                        <Plus className="h-4 w-4" />
+                        Add Catering Event
+                      </Button>
+                    </DialogTrigger>
+                    <DialogContent>
+                      <DialogHeader>
+                        <DialogTitle>Add New Catering Event</DialogTitle>
+                        <DialogDescription>Enter event details below</DialogDescription>
+                      </DialogHeader>
+                      <div className="grid gap-4 py-4">
+                        <div className="grid grid-cols-4 items-center gap-4">
+                          <Label htmlFor="customer-name" className="text-right">
+                            Customer
+                          </Label>
+                          <Input
+                            id="customer-name"
+                            value={newCateringService.customer_name}
+                            onChange={(e) =>
+                              setNewCateringService({ ...newCateringService, customer_name: e.target.value })
+                            }
+                            className="col-span-3"
+                          />
+                        </div>
+                        <div className="grid grid-cols-4 items-center gap-4">
+                          <Label htmlFor="event-type" className="text-right">
+                            Event Type
+                          </Label>
+                          <Input
+                            id="event-type"
+                            value={newCateringService.event_type}
+                            onChange={(e) =>
+                              setNewCateringService({ ...newCateringService, event_type: e.target.value })
+                            }
+                            className="col-span-3"
+                          />
+                        </div>
+                        <div className="grid grid-cols-4 items-center gap-4">
+                          <Label htmlFor="event-date" className="text-right">
+                            Date
+                          </Label>
+                          <Input
+                            id="event-date"
+                            type="date"
+                            value={newCateringService.event_date}
+                            onChange={(e) =>
+                              setNewCateringService({ ...newCateringService, event_date: e.target.value })
+                            }
+                            className="col-span-3"
+                          />
+                        </div>
+                        <div className="grid grid-cols-4 items-center gap-4">
+                          <Label htmlFor="guests" className="text-right">
+                            Guests
+                          </Label>
+                          <Input
+                            id="guests"
+                            type="number"
+                            value={newCateringService.guest_count}
+                            onChange={(e) =>
+                              setNewCateringService({
+                                ...newCateringService,
+                                guest_count: Number.parseInt(e.target.value),
+                              })
+                            }
+                            className="col-span-3"
+                          />
+                        </div>
+                        <div className="grid grid-cols-4 items-center gap-4">
+                          <Label htmlFor="location" className="text-right">
+                            Location
+                          </Label>
+                          <Input
+                            id="location"
+                            value={newCateringService.location}
+                            onChange={(e) => setNewCateringService({ ...newCateringService, location: e.target.value })}
+                            className="col-span-3"
+                          />
+                        </div>
+                      </div>
+                      <DialogFooter>
+                        <Button onClick={addCateringService}>Add Event</Button>
+                      </DialogFooter>
+                    </DialogContent>
+                  </Dialog>
+                </div>
+              </CardHeader>
+              <CardContent>
                 <Table>
                   <TableHeader>
                     <TableRow>
@@ -908,195 +1131,100 @@ function AdminDashboard() {
                     </TableRow>
                   </TableHeader>
                   <TableBody>
-                    {filteredCateringServices.map((service) => (
-                      <TableRow key={service.id}>
-                        <TableCell>{service.customer_name}</TableCell>
-                        <TableCell>{service.event_type}</TableCell>
-                        <TableCell>{service.event_date}</TableCell>
-                        <TableCell>{service.guest_count}</TableCell>
-                        <TableCell>
-                          <Badge variant={getStatusBadgeVariant(service.status)}>{service.status}</Badge>
-                        </TableCell>
-                        <TableCell>{service.location}</TableCell>
-                        <TableCell>
-                          <Dialog
-                            open={isCateringModalOpen && editingCatering?.id === service.id}
-                            onOpenChange={(open) => {
-                              setIsCateringModalOpen(open)
-                              if (!open) setEditingCatering(null)
-                            }}
-                          >
-                            <DialogTrigger asChild>
+                    {cateringServices
+                      .filter(
+                        (service) =>
+                          service.customer_name.toLowerCase().includes(searchTerm.toLowerCase()) ||
+                          service.event_type.toLowerCase().includes(searchTerm.toLowerCase()),
+                      )
+                      .map((service) => (
+                        <TableRow key={service.id}>
+                          <TableCell className="font-medium">{service.customer_name}</TableCell>
+                          <TableCell>{service.event_type}</TableCell>
+                          <TableCell>{new Date(service.event_date).toLocaleDateString()}</TableCell>
+                          <TableCell>{service.guest_count}</TableCell>
+                          <TableCell>
+                            <Badge variant={service.status === "confirmed" ? "default" : "secondary"}>
+                              {service.status}
+                            </Badge>
+                          </TableCell>
+                          <TableCell>{service.location}</TableCell>
+                          <TableCell>
+                            <div className="flex items-center gap-2">
+                              <Button variant="outline" size="sm">
+                                <Edit className="h-4 w-4" />
+                              </Button>
                               <Button
                                 variant="outline"
                                 size="sm"
-                                onClick={() => {
-                                  setEditingCatering(service)
-                                  setIsCateringModalOpen(true)
-                                }}
+                                onClick={() => deleteItem(service.id, "catering-services")}
                               >
-                                <Edit className="h-4 w-4" />
+                                <Trash2 className="h-4 w-4" />
                               </Button>
-                            </DialogTrigger>
-                            <DialogContent>
-                              <DialogHeader>
-                                <DialogTitle>Edit Service</DialogTitle>
-                              </DialogHeader>
-                              <CateringServiceForm
-                                service={editingCatering}
-                                customers={customers}
-                                onSave={handleSaveCateringService}
-                                onCancel={() => {
-                                  setIsCateringModalOpen(false)
-                                  setEditingCatering(null)
-                                }}
-                              />
-                            </DialogContent>
-                          </Dialog>
-                        </TableCell>
-                      </TableRow>
-                    ))}
+                            </div>
+                          </TableCell>
+                        </TableRow>
+                      ))}
                   </TableBody>
                 </Table>
               </CardContent>
             </Card>
           </TabsContent>
 
-          {/* Locations Tab */}
-          <TabsContent value="locations" className="space-y-6">
-            <div className="flex justify-between items-center">
-              <h2 className="text-2xl font-bold">Location Management</h2>
-            </div>
+          {/* Add other tab contents for items, sets, and payments */}
+          <TabsContent value="items" className="space-y-4">
             <Card>
-              <CardContent className="p-6">
-                <Table>
-                  <TableHeader>
-                    <TableRow>
-                      <TableHead>Name</TableHead>
-                      <TableHead>Address</TableHead>
-                      <TableHead>Phone</TableHead>
-                      <TableHead>Status</TableHead>
-                      <TableHead>Actions</TableHead>
-                    </TableRow>
-                  </TableHeader>
-                  <TableBody>
-                    {filteredLocations.map((location) => (
-                      <TableRow key={location.id}>
-                        <TableCell>{location.name}</TableCell>
-                        <TableCell>{location.address}</TableCell>
-                        <TableCell>{location.phone}</TableCell>
-                        <TableCell>
-                          <Badge variant={getStatusBadgeVariant(location.status)}>{location.status}</Badge>
-                        </TableCell>
-                        <TableCell>
-                          <Dialog
-                            open={isLocationModalOpen && editingLocation?.id === location.id}
-                            onOpenChange={(open) => {
-                              setIsLocationModalOpen(open)
-                              if (!open) setEditingLocation(null)
-                            }}
-                          >
-                            <DialogTrigger asChild>
-                              <Button
-                                variant="outline"
-                                size="sm"
-                                onClick={() => {
-                                  setEditingLocation(location)
-                                  setIsLocationModalOpen(true)
-                                }}
-                              >
-                                <Edit className="h-4 w-4" />
-                              </Button>
-                            </DialogTrigger>
-                            <DialogContent>
-                              <DialogHeader>
-                                <DialogTitle>Edit Location</DialogTitle>
-                              </DialogHeader>
-                              <LocationForm
-                                location={editingLocation}
-                                onSave={handleSaveLocation}
-                                onCancel={() => {
-                                  setIsLocationModalOpen(false)
-                                  setEditingLocation(null)
-                                }}
-                              />
-                            </DialogContent>
-                          </Dialog>
-                        </TableCell>
-                      </TableRow>
-                    ))}
-                  </TableBody>
-                </Table>
+              <CardHeader>
+                <CardTitle>Menu Items</CardTitle>
+                <CardDescription>Manage your menu items</CardDescription>
+              </CardHeader>
+              <CardContent>
+                <p>Items management coming soon...</p>
               </CardContent>
             </Card>
           </TabsContent>
 
-          {/* Payments Tab */}
-          <TabsContent value="payments" className="space-y-6">
-            <div className="flex justify-between items-center">
-              <h2 className="text-2xl font-bold">Payment Management</h2>
-            </div>
+          <TabsContent value="sets" className="space-y-4">
             <Card>
-              <CardContent className="p-6">
+              <CardHeader>
+                <CardTitle>Meal Sets</CardTitle>
+                <CardDescription>Manage your meal set combinations</CardDescription>
+              </CardHeader>
+              <CardContent>
+                <p>Meal sets management coming soon...</p>
+              </CardContent>
+            </Card>
+          </TabsContent>
+
+          <TabsContent value="payments" className="space-y-4">
+            <Card>
+              <CardHeader>
+                <CardTitle>Payment Management</CardTitle>
+                <CardDescription>Track and manage payments</CardDescription>
+              </CardHeader>
+              <CardContent>
                 <Table>
                   <TableHeader>
                     <TableRow>
-                      <TableHead>Customer</TableHead>
+                      <TableHead>Order ID</TableHead>
                       <TableHead>Amount</TableHead>
                       <TableHead>Method</TableHead>
                       <TableHead>Status</TableHead>
                       <TableHead>Date</TableHead>
-                      <TableHead>Transaction ID</TableHead>
-                      <TableHead>Actions</TableHead>
                     </TableRow>
                   </TableHeader>
                   <TableBody>
-                    {filteredPayments.map((payment) => (
+                    {payments.map((payment) => (
                       <TableRow key={payment.id}>
-                        <TableCell>{payment.customer_name}</TableCell>
-                        <TableCell>{formatCurrency(payment.amount)}</TableCell>
+                        <TableCell>#{payment.order_id}</TableCell>
+                        <TableCell>${payment.amount.toFixed(2)}</TableCell>
                         <TableCell>{payment.payment_method}</TableCell>
                         <TableCell>
-                          <Badge variant={getStatusBadgeVariant(payment.status)}>{payment.status}</Badge>
+                          <Badge variant={payment.status === "completed" ? "default" : "secondary"}>
+                            {payment.status}
+                          </Badge>
                         </TableCell>
-                        <TableCell>{formatDate(payment.payment_date)}</TableCell>
-                        <TableCell>{payment.transaction_id}</TableCell>
-                        <TableCell>
-                          <Dialog
-                            open={isPaymentModalOpen && editingPayment?.id === payment.id}
-                            onOpenChange={(open) => {
-                              setIsPaymentModalOpen(open)
-                              if (!open) setEditingPayment(null)
-                            }}
-                          >
-                            <DialogTrigger asChild>
-                              <Button
-                                variant="outline"
-                                size="sm"
-                                onClick={() => {
-                                  setEditingPayment(payment)
-                                  setIsPaymentModalOpen(true)
-                                }}
-                              >
-                                <Edit className="h-4 w-4" />
-                              </Button>
-                            </DialogTrigger>
-                            <DialogContent>
-                              <DialogHeader>
-                                <DialogTitle>Edit Payment</DialogTitle>
-                              </DialogHeader>
-                              <PaymentForm
-                                payment={editingPayment}
-                                customers={customers}
-                                onSave={handleSavePayment}
-                                onCancel={() => {
-                                  setIsPaymentModalOpen(false)
-                                  setEditingPayment(null)
-                                }}
-                              />
-                            </DialogContent>
-                          </Dialog>
-                        </TableCell>
+                        <TableCell>{new Date(payment.created_at).toLocaleDateString()}</TableCell>
                       </TableRow>
                     ))}
                   </TableBody>
@@ -1105,7 +1233,7 @@ function AdminDashboard() {
             </Card>
           </TabsContent>
         </Tabs>
-      </div>
+      </main>
     </div>
   )
 }
@@ -1664,7 +1792,7 @@ function PaymentForm({
         <Label htmlFor="paymentMethod">Payment Method</Label>
         <Select
           value={formData.payment_method}
-          onValueChange={(value) => setFormData({ ...formData, payment_method: value })}
+          onChange={(value) => setFormData({ ...formData, payment_method: value })}
         >
           <SelectTrigger>
             <SelectValue />
