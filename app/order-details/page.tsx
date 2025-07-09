@@ -1,111 +1,119 @@
 "use client"
 
-import { useState, useEffect, Suspense } from "react"
+import { useState, useEffect } from "react"
 import { useSearchParams } from "next/navigation"
-import { supabase } from "@/lib/supabase-auth"
+import { Button } from "@/components/ui/button"
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
+import { Input } from "@/components/ui/input"
+import { Label } from "@/components/ui/label"
+import { Textarea } from "@/components/ui/textarea"
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
+import { Separator } from "@/components/ui/separator"
+import { CalendarDays, Clock, User, CreditCard, CheckCircle } from "lucide-react"
+import { Header } from "@/components/Header"
+import { Footer } from "@/components/Footer"
 
-interface Item {
+interface OrderItem {
   id: string
   name: string
-  category: string
   price: number
-  description?: string
+  quantity: number
+  type: "item" | "meal_set"
 }
 
-function OrderDetailsContent() {
+interface Location {
+  id: number
+  name: string
+  address: string
+  phone: string
+  status: string
+}
+
+export default function OrderDetailsPage() {
   const searchParams = useSearchParams()
-  const [selectedItems, setSelectedItems] = useState<Item[]>([])
-  const [quantities, setQuantities] = useState<{ [key: string]: number }>({})
+  const [orderItems, setOrderItems] = useState<OrderItem[]>([])
+  const [locations, setLocations] = useState<Location[]>([])
+  const [loading, setLoading] = useState(false)
+  const [orderSubmitted, setOrderSubmitted] = useState(false)
+  const [orderId, setOrderId] = useState<string>("")
+
+  // Customer Information
   const [customerInfo, setCustomerInfo] = useState({
     name: "",
     email: "",
     phone: "",
-    address: "",
-    paymentMethod: "cash",
-    specialRequests: "",
   })
-  const [isSubmitting, setIsSubmitting] = useState(false)
-  const [user, setUser] = useState<any>(null)
+
+  // Order Details
+  const [orderDetails, setOrderDetails] = useState({
+    orderType: "delivery",
+    deliveryAddress: "",
+    deliveryDate: "",
+    deliveryTime: "",
+    specialInstructions: "",
+    locationId: "",
+    paymentMethod: "cash",
+  })
+
+  // Event Details (for catering)
+  const [eventDetails, setEventDetails] = useState({
+    eventType: "",
+    guestCount: 1,
+    eventLocation: "",
+  })
 
   useEffect(() => {
-    // Get user info
-    const getUser = async () => {
-      const {
-        data: { session },
-      } = await supabase.auth.getSession()
-      if (session?.user) {
-        setUser(session.user)
-        setCustomerInfo((prev) => ({
-          ...prev,
-          name: session.user.user_metadata?.full_name || "",
-          email: session.user.email || "",
-        }))
-      }
-    }
-    getUser()
-
-    // Parse items from URL
+    // Parse order items from URL params
     const itemsParam = searchParams.get("items")
-    const customParam = searchParams.get("custom")
-
     if (itemsParam) {
       try {
         const items = JSON.parse(decodeURIComponent(itemsParam))
-        setSelectedItems(items)
-        // Initialize quantities
-        const initialQuantities: { [key: string]: number } = {}
-        items.forEach((item: Item) => {
-          initialQuantities[item.id] = 1
-        })
-        setQuantities(initialQuantities)
+        setOrderItems(items)
       } catch (error) {
-        console.error("Error parsing items:", error)
+        console.error("Error parsing order items:", error)
       }
     }
+
+    // Fetch available locations
+    fetchLocations()
   }, [searchParams])
 
-  const calculateTotal = () => {
-    return selectedItems.reduce((total, item) => {
-      return total + item.price * (quantities[item.id] || 1)
-    }, 0)
+  const fetchLocations = async () => {
+    try {
+      const response = await fetch("/api/locations")
+      if (response.ok) {
+        const data = await response.json()
+        setLocations(data.filter((loc: Location) => loc.status === "active"))
+      }
+    } catch (error) {
+      console.error("Error fetching locations:", error)
+    }
   }
 
-  const handleQuantityChange = (itemId: string, quantity: number) => {
-    if (quantity < 1) return
-    setQuantities((prev) => ({
-      ...prev,
-      [itemId]: quantity,
-    }))
+  const calculateTotal = () => {
+    return orderItems.reduce((total, item) => total + item.price * item.quantity, 0)
   }
 
   const handleSubmitOrder = async () => {
-    if (!customerInfo.name || !customerInfo.email || !customerInfo.phone) {
-      alert("Please fill in all required fields")
-      return
-    }
-
-    setIsSubmitting(true)
-
+    setLoading(true)
     try {
       const orderData = {
         customer_name: customerInfo.name,
         customer_email: customerInfo.email,
-        contact_number: customerInfo.phone,
-        delivery_address: customerInfo.address,
-        payment_method: customerInfo.paymentMethod,
-        special_requests: customerInfo.specialRequests,
-        items: selectedItems.map((item) => ({
-          ...item,
-          quantity: quantities[item.id] || 1,
-        })),
+        customer_phone: customerInfo.phone,
+        order_type: orderDetails.orderType,
+        delivery_address: orderDetails.deliveryAddress,
+        delivery_date: orderDetails.deliveryDate,
+        delivery_time: orderDetails.deliveryTime,
+        special_instructions: orderDetails.specialInstructions,
+        location_id: orderDetails.locationId ? Number.parseInt(orderDetails.locationId) : null,
+        payment_method: orderDetails.paymentMethod,
         total_amount: calculateTotal(),
-        order_type: "custom",
-        quantity: selectedItems.reduce((sum, item) => sum + (quantities[item.id] || 1), 0),
-        contact_person: customerInfo.name,
-        event_type: null,
-        event_date: null,
-        guest_count: selectedItems.reduce((sum, item) => sum + (quantities[item.id] || 1), 0),
+        items: orderItems,
+        event_details: orderDetails.orderType === "catering" ? eventDetails : null,
       }
+
+      console.log("Submitting order:", orderData)
 
       const response = await fetch("/api/orders", {
         method: "POST",
@@ -117,285 +125,305 @@ function OrderDetailsContent() {
 
       if (response.ok) {
         const result = await response.json()
-        alert(`Order placed successfully! Order ID: #${result.order.id}`)
-        window.location.href = "/orders"
+        setOrderId(result.id)
+        setOrderSubmitted(true)
+        console.log("Order submitted successfully:", result)
       } else {
         const error = await response.json()
-        throw new Error(error.error || "Failed to place order")
+        console.error("Error submitting order:", error)
+        alert("Failed to submit order. Please try again.")
       }
     } catch (error) {
-      console.error("Error placing order:", error)
-      alert(`Failed to submit order: ${error instanceof Error ? error.message : "Unknown error"}`)
+      console.error("Error submitting order:", error)
+      alert("Failed to submit order. Please try again.")
     } finally {
-      setIsSubmitting(false)
+      setLoading(false)
     }
   }
 
-  const formatCurrency = (amount: number) => {
-    return new Intl.NumberFormat("en-PH", {
-      style: "currency",
-      currency: "PHP",
-    }).format(amount)
-  }
-
-  if (selectedItems.length === 0) {
+  if (orderSubmitted) {
     return (
-      <div style={{ padding: "2rem", textAlign: "center" }}>
-        <h2>No items selected</h2>
-        <p>Please go back and select items for your order.</p>
-        <a href="/custom-meals" style={{ color: "#dc2626", textDecoration: "underline" }}>
-          Back to Custom Meals
-        </a>
+      <div className="min-h-screen bg-gray-50">
+        <Header />
+        <main className="max-w-2xl mx-auto px-4 py-8">
+          <Card className="text-center">
+            <CardHeader>
+              <div className="mx-auto w-16 h-16 bg-green-100 rounded-full flex items-center justify-center mb-4">
+                <CheckCircle className="w-8 h-8 text-green-600" />
+              </div>
+              <CardTitle className="text-2xl text-green-600">Order Confirmed!</CardTitle>
+              <CardDescription>Your order has been successfully submitted and is being processed.</CardDescription>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              <div className="bg-gray-50 p-4 rounded-lg">
+                <p className="text-sm text-gray-600">Order ID</p>
+                <p className="font-mono text-lg font-semibold">#{orderId}</p>
+              </div>
+              <p className="text-gray-600">We'll send you updates about your order via email and SMS.</p>
+              <div className="flex gap-4 justify-center pt-4">
+                <Button onClick={() => (window.location.href = "/")}>Back to Home</Button>
+                <Button variant="outline" onClick={() => (window.location.href = "/orders")}>
+                  View My Orders
+                </Button>
+              </div>
+            </CardContent>
+          </Card>
+        </main>
+        <Footer />
       </div>
     )
   }
 
   return (
-    <div style={{ minHeight: "100vh", backgroundColor: "#f8fafc", padding: "2rem 0" }}>
-      <div style={{ maxWidth: "800px", margin: "0 auto", padding: "0 1rem" }}>
-        <h1 style={{ fontSize: "2rem", fontWeight: "600", marginBottom: "2rem", textAlign: "center" }}>
-          Order Details
-        </h1>
-
-        <div style={{ display: "grid", gap: "2rem", gridTemplateColumns: "1fr 1fr" }}>
+    <div className="min-h-screen bg-gray-50">
+      <Header />
+      <main className="max-w-4xl mx-auto px-4 py-8">
+        <div className="grid gap-8 lg:grid-cols-2">
           {/* Order Summary */}
-          <div
-            style={{
-              backgroundColor: "white",
-              padding: "1.5rem",
-              borderRadius: "0.5rem",
-              boxShadow: "0 1px 3px rgba(0,0,0,0.1)",
-              height: "fit-content",
-            }}
-          >
-            <h2 style={{ fontSize: "1.25rem", fontWeight: "600", marginBottom: "1rem" }}>Order Summary</h2>
-            <div style={{ marginBottom: "1rem" }}>
-              {selectedItems.map((item) => (
-                <div
-                  key={item.id}
-                  style={{
-                    display: "flex",
-                    justifyContent: "space-between",
-                    alignItems: "center",
-                    padding: "0.75rem 0",
-                    borderBottom: "1px solid #f1f5f9",
-                  }}
-                >
-                  <div>
-                    <h3 style={{ fontSize: "0.875rem", fontWeight: "500", margin: 0 }}>{item.name}</h3>
-                    <p style={{ fontSize: "0.75rem", color: "#64748b", margin: 0 }}>
-                      {formatCurrency(item.price)} each
-                    </p>
+          <div className="space-y-6">
+            <Card>
+              <CardHeader>
+                <CardTitle>Order Summary</CardTitle>
+                <CardDescription>Review your selected items</CardDescription>
+              </CardHeader>
+              <CardContent className="space-y-4">
+                {orderItems.map((item) => (
+                  <div key={`${item.type}-${item.id}`} className="flex justify-between items-center">
+                    <div>
+                      <p className="font-medium">{item.name}</p>
+                      <p className="text-sm text-gray-600">
+                        ${item.price.toFixed(2)} × {item.quantity}
+                      </p>
+                    </div>
+                    <p className="font-semibold">${(item.price * item.quantity).toFixed(2)}</p>
                   </div>
-                  <div style={{ display: "flex", alignItems: "center", gap: "0.5rem" }}>
-                    <button
-                      onClick={() => handleQuantityChange(item.id, (quantities[item.id] || 1) - 1)}
-                      style={{
-                        width: "24px",
-                        height: "24px",
-                        border: "1px solid #d1d5db",
-                        backgroundColor: "white",
-                        borderRadius: "0.25rem",
-                        cursor: "pointer",
-                      }}
+                ))}
+                <Separator />
+                <div className="flex justify-between items-center text-lg font-bold">
+                  <span>Total</span>
+                  <span>${calculateTotal().toFixed(2)}</span>
+                </div>
+              </CardContent>
+            </Card>
+          </div>
+
+          {/* Order Details Form */}
+          <div className="space-y-6">
+            {/* Customer Information */}
+            <Card>
+              <CardHeader>
+                <CardTitle className="flex items-center gap-2">
+                  <User className="w-5 h-5" />
+                  Customer Information
+                </CardTitle>
+              </CardHeader>
+              <CardContent className="space-y-4">
+                <div className="space-y-2">
+                  <Label htmlFor="name">Full Name *</Label>
+                  <Input
+                    id="name"
+                    value={customerInfo.name}
+                    onChange={(e) => setCustomerInfo({ ...customerInfo, name: e.target.value })}
+                    required
+                  />
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="email">Email Address *</Label>
+                  <Input
+                    id="email"
+                    type="email"
+                    value={customerInfo.email}
+                    onChange={(e) => setCustomerInfo({ ...customerInfo, email: e.target.value })}
+                    required
+                  />
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="phone">Phone Number</Label>
+                  <Input
+                    id="phone"
+                    type="tel"
+                    value={customerInfo.phone}
+                    onChange={(e) => setCustomerInfo({ ...customerInfo, phone: e.target.value })}
+                  />
+                </div>
+              </CardContent>
+            </Card>
+
+            {/* Order Type */}
+            <Card>
+              <CardHeader>
+                <CardTitle>Order Type</CardTitle>
+              </CardHeader>
+              <CardContent className="space-y-4">
+                <Select
+                  value={orderDetails.orderType}
+                  onValueChange={(value) => setOrderDetails({ ...orderDetails, orderType: value })}
+                >
+                  <SelectTrigger>
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="delivery">Delivery</SelectItem>
+                    <SelectItem value="pickup">Pickup</SelectItem>
+                    <SelectItem value="catering">Catering Event</SelectItem>
+                  </SelectContent>
+                </Select>
+
+                {orderDetails.orderType === "delivery" && (
+                  <div className="space-y-4">
+                    <div className="space-y-2">
+                      <Label htmlFor="address">Delivery Address *</Label>
+                      <Textarea
+                        id="address"
+                        value={orderDetails.deliveryAddress}
+                        onChange={(e) => setOrderDetails({ ...orderDetails, deliveryAddress: e.target.value })}
+                        placeholder="Enter your full delivery address"
+                        required
+                      />
+                    </div>
+                  </div>
+                )}
+
+                {orderDetails.orderType === "pickup" && locations.length > 0 && (
+                  <div className="space-y-2">
+                    <Label htmlFor="location">Pickup Location *</Label>
+                    <Select
+                      value={orderDetails.locationId}
+                      onValueChange={(value) => setOrderDetails({ ...orderDetails, locationId: value })}
                     >
-                      -
-                    </button>
-                    <span style={{ minWidth: "20px", textAlign: "center" }}>{quantities[item.id] || 1}</span>
-                    <button
-                      onClick={() => handleQuantityChange(item.id, (quantities[item.id] || 1) + 1)}
-                      style={{
-                        width: "24px",
-                        height: "24px",
-                        border: "1px solid #d1d5db",
-                        backgroundColor: "white",
-                        borderRadius: "0.25rem",
-                        cursor: "pointer",
-                      }}
-                    >
-                      +
-                    </button>
+                      <SelectTrigger>
+                        <SelectValue placeholder="Select pickup location" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {locations.map((location) => (
+                          <SelectItem key={location.id} value={location.id.toString()}>
+                            {location.name} - {location.address}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
+                )}
+
+                {orderDetails.orderType === "catering" && (
+                  <div className="space-y-4">
+                    <div className="space-y-2">
+                      <Label htmlFor="eventType">Event Type</Label>
+                      <Input
+                        id="eventType"
+                        value={eventDetails.eventType}
+                        onChange={(e) => setEventDetails({ ...eventDetails, eventType: e.target.value })}
+                        placeholder="e.g., Wedding, Corporate Event, Birthday Party"
+                      />
+                    </div>
+                    <div className="space-y-2">
+                      <Label htmlFor="guestCount">Number of Guests</Label>
+                      <Input
+                        id="guestCount"
+                        type="number"
+                        min="1"
+                        value={eventDetails.guestCount}
+                        onChange={(e) =>
+                          setEventDetails({ ...eventDetails, guestCount: Number.parseInt(e.target.value) || 1 })
+                        }
+                      />
+                    </div>
+                    <div className="space-y-2">
+                      <Label htmlFor="eventLocation">Event Location</Label>
+                      <Textarea
+                        id="eventLocation"
+                        value={eventDetails.eventLocation}
+                        onChange={(e) => setEventDetails({ ...eventDetails, eventLocation: e.target.value })}
+                        placeholder="Enter the event venue address"
+                      />
+                    </div>
+                  </div>
+                )}
+
+                <div className="grid grid-cols-2 gap-4">
+                  <div className="space-y-2">
+                    <Label htmlFor="date">
+                      <CalendarDays className="w-4 h-4 inline mr-1" />
+                      {orderDetails.orderType === "catering" ? "Event Date" : "Delivery Date"} *
+                    </Label>
+                    <Input
+                      id="date"
+                      type="date"
+                      value={orderDetails.deliveryDate}
+                      onChange={(e) => setOrderDetails({ ...orderDetails, deliveryDate: e.target.value })}
+                      required
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <Label htmlFor="time">
+                      <Clock className="w-4 h-4 inline mr-1" />
+                      {orderDetails.orderType === "catering" ? "Event Time" : "Delivery Time"}
+                    </Label>
+                    <Input
+                      id="time"
+                      type="time"
+                      value={orderDetails.deliveryTime}
+                      onChange={(e) => setOrderDetails({ ...orderDetails, deliveryTime: e.target.value })}
+                    />
                   </div>
                 </div>
-              ))}
-            </div>
-            <div
-              style={{
-                display: "flex",
-                justifyContent: "space-between",
-                alignItems: "center",
-                padding: "1rem 0",
-                borderTop: "2px solid #e2e8f0",
-                fontSize: "1.125rem",
-                fontWeight: "600",
-              }}
-            >
-              <span>Total:</span>
-              <span style={{ color: "#dc2626" }}>{formatCurrency(calculateTotal())}</span>
-            </div>
-          </div>
+              </CardContent>
+            </Card>
 
-          {/* Customer Information */}
-          <div
-            style={{
-              backgroundColor: "white",
-              padding: "1.5rem",
-              borderRadius: "0.5rem",
-              boxShadow: "0 1px 3px rgba(0,0,0,0.1)",
-            }}
-          >
-            <h2 style={{ fontSize: "1.25rem", fontWeight: "600", marginBottom: "1rem" }}>Customer Information</h2>
-            <form style={{ display: "flex", flexDirection: "column", gap: "1rem" }}>
-              <div>
-                <label style={{ display: "block", fontSize: "0.875rem", fontWeight: "500", marginBottom: "0.25rem" }}>
-                  Full Name *
-                </label>
-                <input
-                  type="text"
-                  value={customerInfo.name}
-                  onChange={(e) => setCustomerInfo({ ...customerInfo, name: e.target.value })}
-                  style={{
-                    width: "100%",
-                    padding: "0.5rem",
-                    border: "1px solid #d1d5db",
-                    borderRadius: "0.25rem",
-                    fontSize: "0.875rem",
-                  }}
-                  required
-                />
-              </div>
-
-              <div>
-                <label style={{ display: "block", fontSize: "0.875rem", fontWeight: "500", marginBottom: "0.25rem" }}>
-                  Email Address *
-                </label>
-                <input
-                  type="email"
-                  value={customerInfo.email}
-                  onChange={(e) => setCustomerInfo({ ...customerInfo, email: e.target.value })}
-                  style={{
-                    width: "100%",
-                    padding: "0.5rem",
-                    border: "1px solid #d1d5db",
-                    borderRadius: "0.25rem",
-                    fontSize: "0.875rem",
-                  }}
-                  required
-                />
-              </div>
-
-              <div>
-                <label style={{ display: "block", fontSize: "0.875rem", fontWeight: "500", marginBottom: "0.25rem" }}>
-                  Contact Number *
-                </label>
-                <input
-                  type="tel"
-                  value={customerInfo.phone}
-                  onChange={(e) => setCustomerInfo({ ...customerInfo, phone: e.target.value })}
-                  style={{
-                    width: "100%",
-                    padding: "0.5rem",
-                    border: "1px solid #d1d5db",
-                    borderRadius: "0.25rem",
-                    fontSize: "0.875rem",
-                  }}
-                  required
-                />
-              </div>
-
-              <div>
-                <label style={{ display: "block", fontSize: "0.875rem", fontWeight: "500", marginBottom: "0.25rem" }}>
-                  Delivery Address
-                </label>
-                <textarea
-                  value={customerInfo.address}
-                  onChange={(e) => setCustomerInfo({ ...customerInfo, address: e.target.value })}
-                  style={{
-                    width: "100%",
-                    padding: "0.5rem",
-                    border: "1px solid #d1d5db",
-                    borderRadius: "0.25rem",
-                    fontSize: "0.875rem",
-                    minHeight: "80px",
-                    resize: "vertical",
-                  }}
-                  placeholder="Enter your delivery address"
-                />
-              </div>
-
-              <div>
-                <label style={{ display: "block", fontSize: "0.875rem", fontWeight: "500", marginBottom: "0.25rem" }}>
-                  Payment Method *
-                </label>
-                <select
-                  value={customerInfo.paymentMethod}
-                  onChange={(e) => setCustomerInfo({ ...customerInfo, paymentMethod: e.target.value })}
-                  style={{
-                    width: "100%",
-                    padding: "0.5rem",
-                    border: "1px solid #d1d5db",
-                    borderRadius: "0.25rem",
-                    fontSize: "0.875rem",
-                  }}
+            {/* Payment Method */}
+            <Card>
+              <CardHeader>
+                <CardTitle className="flex items-center gap-2">
+                  <CreditCard className="w-5 h-5" />
+                  Payment Method
+                </CardTitle>
+              </CardHeader>
+              <CardContent>
+                <Select
+                  value={orderDetails.paymentMethod}
+                  onValueChange={(value) => setOrderDetails({ ...orderDetails, paymentMethod: value })}
                 >
-                  <option value="cash">Cash on Delivery</option>
-                  <option value="bank">Bank Transfer</option>
-                  <option value="gcash">GCash</option>
-                  <option value="credit">Credit Card</option>
-                </select>
-              </div>
+                  <SelectTrigger>
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="cash">Cash on Delivery</SelectItem>
+                    <SelectItem value="card">Credit/Debit Card</SelectItem>
+                    <SelectItem value="bank_transfer">Bank Transfer</SelectItem>
+                    <SelectItem value="gcash">GCash</SelectItem>
+                  </SelectContent>
+                </Select>
+              </CardContent>
+            </Card>
 
-              <div>
-                <label style={{ display: "block", fontSize: "0.875rem", fontWeight: "500", marginBottom: "0.25rem" }}>
-                  Special Requests
-                </label>
-                <textarea
-                  value={customerInfo.specialRequests}
-                  onChange={(e) => setCustomerInfo({ ...customerInfo, specialRequests: e.target.value })}
-                  style={{
-                    width: "100%",
-                    padding: "0.5rem",
-                    border: "1px solid #d1d5db",
-                    borderRadius: "0.25rem",
-                    fontSize: "0.875rem",
-                    minHeight: "80px",
-                    resize: "vertical",
-                  }}
-                  placeholder="Any special requests or dietary requirements"
+            {/* Special Instructions */}
+            <Card>
+              <CardHeader>
+                <CardTitle>Special Instructions</CardTitle>
+              </CardHeader>
+              <CardContent>
+                <Textarea
+                  value={orderDetails.specialInstructions}
+                  onChange={(e) => setOrderDetails({ ...orderDetails, specialInstructions: e.target.value })}
+                  placeholder="Any special requests or dietary requirements..."
+                  rows={3}
                 />
-              </div>
+              </CardContent>
+            </Card>
 
-              <button
-                type="button"
-                onClick={handleSubmitOrder}
-                disabled={isSubmitting}
-                style={{
-                  width: "100%",
-                  padding: "0.75rem",
-                  backgroundColor: isSubmitting ? "#9ca3af" : "#dc2626",
-                  color: "white",
-                  border: "none",
-                  borderRadius: "0.5rem",
-                  fontSize: "1rem",
-                  fontWeight: "500",
-                  cursor: isSubmitting ? "not-allowed" : "pointer",
-                  marginTop: "1rem",
-                }}
-              >
-                {isSubmitting ? "Placing Order..." : "Place Order"}
-              </button>
-            </form>
+            {/* Submit Button */}
+            <Button
+              onClick={handleSubmitOrder}
+              disabled={loading || !customerInfo.name || !customerInfo.email || !orderDetails.deliveryDate}
+              className="w-full"
+              size="lg"
+            >
+              {loading ? "Submitting Order..." : `Place Order - $${calculateTotal().toFixed(2)}`}
+            </Button>
           </div>
         </div>
-      </div>
+      </main>
+      <Footer />
     </div>
-  )
-}
-
-export default function OrderDetailsPage() {
-  return (
-    <Suspense fallback={<div>Loading...</div>}>
-      <OrderDetailsContent />
-    </Suspense>
   )
 }
