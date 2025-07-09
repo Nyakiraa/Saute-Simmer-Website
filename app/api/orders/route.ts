@@ -4,197 +4,131 @@ import { createServerClient } from "@/lib/supabase"
 export async function GET() {
   try {
     const supabase = createServerClient()
+
     const { data: orders, error } = await supabase
       .from("orders")
       .select(`
         *,
         customers (
+          id,
           name,
           email,
           phone
         ),
-        payments (
-          amount,
-          payment_method,
-          transaction_id,
-          payment_date
+        meal_sets (
+          id,
+          name,
+          type,
+          price
         )
       `)
       .order("created_at", { ascending: false })
 
     if (error) {
-      console.error("Error fetching orders:", error)
+      console.error("Database error:", error)
       return NextResponse.json({ error: "Failed to fetch orders" }, { status: 500 })
     }
 
-    return NextResponse.json(orders)
+    // Transform the data to flatten the relationships
+    const transformedOrders =
+      orders?.map((order) => ({
+        ...order,
+        customer_name: order.customers?.name || "Unknown Customer",
+        customer_email: order.customers?.email || "",
+        customer_phone: order.customers?.phone || "",
+        meal_set_name: order.meal_sets?.name || null,
+        meal_set_type: order.meal_sets?.type || null,
+        meal_set_price: order.meal_sets?.price || null,
+      })) || []
+
+    return NextResponse.json(transformedOrders)
   } catch (error) {
-    console.error("Error:", error)
-    return NextResponse.json({ error: "Failed to fetch orders" }, { status: 500 })
+    console.error("Server error:", error)
+    return NextResponse.json({ error: "Internal server error" }, { status: 500 })
   }
 }
 
 export async function POST(request: NextRequest) {
   try {
-    const authHeader = request.headers.get("authorization")
-    if (!authHeader || !authHeader.startsWith("Bearer ")) {
-      return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
-    }
-
+    const body = await request.json()
     const supabase = createServerClient()
 
-    // Get the current user
-    const {
-      data: { user },
-      error: userError,
-    } = await supabase.auth.getUser(authHeader.replace("Bearer ", ""))
-
-    if (userError || !user) {
-      console.error("User authentication failed:", userError)
-      return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
-    }
-
-    const body = await request.json()
-    console.log("Creating custom order with data:", body)
-
     // Validate required fields
-    if (!body.quantity || !body.event_type || !body.event_date || !body.delivery_address || !body.payment_method) {
+    const { customer_id, meal_set_id, total_amount, delivery_date, delivery_time, location, guest_count } = body
+
+    if (!customer_id || !meal_set_id || !total_amount) {
       return NextResponse.json(
-        {
-          error: "Missing required fields",
-          required: ["quantity", "event_type", "event_date", "delivery_address", "payment_method"],
-          received: Object.keys(body),
-        },
+        { error: "Missing required fields: customer_id, meal_set_id, total_amount" },
         { status: 400 },
       )
     }
 
-    // First, ensure customer exists
-    let customer
-    const { data: existingCustomer, error: customerFetchError } = await supabase
-      .from("customers")
-      .select("*")
-      .eq("email", user.email)
-      .single()
-
-    if (customerFetchError && customerFetchError.code !== "PGRST116") {
-      console.error("Error fetching customer:", customerFetchError)
-      return NextResponse.json({ error: "Database error" }, { status: 500 })
-    }
-
-    if (existingCustomer) {
-      customer = existingCustomer
-      console.log("Found existing customer:", customer.id)
-    } else {
-      // Create new customer
-      const customerData = {
-        name:
-          body.contact_person ||
-          user.user_metadata?.full_name ||
-          user.user_metadata?.name ||
-          user.email?.split("@")[0] ||
-          "Unknown",
-        email: user.email,
-        phone: body.contact_number || null,
-        address: body.delivery_address,
-      }
-
-      console.log("Creating new customer:", customerData)
-
-      const { data: newCustomer, error: customerCreateError } = await supabase
-        .from("customers")
-        .insert([customerData])
-        .select()
-        .single()
-
-      if (customerCreateError) {
-        console.error("Error creating customer:", customerCreateError)
-        return NextResponse.json({ error: "Failed to create customer", details: customerCreateError }, { status: 500 })
-      }
-      customer = newCustomer
-      console.log("Created new customer:", customer.id)
-    }
-
-    // Calculate total amount for custom order (this would be based on selected items)
-    let totalAmount = 0
-    if (body.selected_items) {
-      // Calculate based on selected items
-      Object.values(body.selected_items).forEach((categoryItems: any) => {
-        if (Array.isArray(categoryItems)) {
-          categoryItems.forEach((item: any) => {
-            totalAmount += item.price || 0
-          })
-        }
+    // Insert the order
+    const { data: order, error: orderError } = await supabase
+      .from("orders")
+      .insert({
+        customer_id,
+        meal_set_id,
+        total_amount,
+        delivery_date,
+        delivery_time,
+        location,
+        guest_count,
+        special_requests: body.special_requests || null,
+        status: "pending",
       })
-    }
-    totalAmount = totalAmount * body.quantity
-
-    // Create the order
-    const orderData = {
-      customer_id: customer.id,
-      customer_name: customer.name,
-      customer_email: customer.email,
-      order_type: "custom",
-      quantity: body.quantity,
-      total_amount: totalAmount,
-      event_type: body.event_type,
-      event_date: body.event_date,
-      delivery_address: body.delivery_address,
-      contact_person: body.contact_person || customer.name,
-      contact_number: body.contact_number,
-      payment_method: body.payment_method,
-      special_requests: body.special_requests,
-      status: "pending",
-      order_date: new Date().toISOString().split("T")[0],
-      items: body.selected_items ? JSON.stringify(body.selected_items) : "[]",
-    }
-
-    console.log("Inserting order with data:", orderData)
-
-    const { data: order, error: orderError } = await supabase.from("orders").insert([orderData]).select().single()
+      .select(`
+        *,
+        customers (
+          id,
+          name,
+          email,
+          phone
+        ),
+        meal_sets (
+          id,
+          name,
+          type,
+          price
+        )
+      `)
+      .single()
 
     if (orderError) {
-      console.error("Error creating order:", orderError)
-      return NextResponse.json({ error: "Failed to create order", details: orderError }, { status: 500 })
+      console.error("Order creation error:", orderError)
+      return NextResponse.json({ error: "Failed to create order" }, { status: 500 })
     }
 
-    console.log("Order created successfully:", order)
-
-    // Create payment record
-    const paymentData = {
+    // Create corresponding payment record
+    const { error: paymentError } = await supabase.from("payments").insert({
       order_id: order.id,
-      customer_id: customer.id,
-      customer_name: customer.name,
-      amount: totalAmount,
-      payment_method: body.payment_method,
-      transaction_id: `TXN-${order.id}-${Date.now()}`,
-      payment_date: new Date().toISOString(),
-    }
-
-    console.log("Creating payment record:", paymentData)
-
-    const { data: payment, error: paymentError } = await supabase
-      .from("payments")
-      .insert([paymentData])
-      .select()
-      .single()
+      customer_id: customer_id,
+      amount: total_amount,
+      payment_method: body.payment_method || "pending",
+      status: "pending",
+      payment_date: new Date().toISOString().split("T")[0],
+      notes: `Payment for Order #${order.id}`,
+    })
 
     if (paymentError) {
-      console.error("Error creating payment:", paymentError)
+      console.error("Payment creation error:", paymentError)
       // Don't fail the order creation if payment record fails
     }
 
-    return NextResponse.json(
-      {
-        success: true,
-        order,
-        payment,
-        message: "Custom order created successfully",
-      },
-      { status: 201 },
-    )
+    // Transform the response
+    const transformedOrder = {
+      ...order,
+      customer_name: order.customers?.name || "Unknown Customer",
+      customer_email: order.customers?.email || "",
+      customer_phone: order.customers?.phone || "",
+      meal_set_name: order.meal_sets?.name || null,
+      meal_set_type: order.meal_sets?.type || null,
+      meal_set_price: order.meal_sets?.price || null,
+    }
+
+    return NextResponse.json(transformedOrder, { status: 201 })
   } catch (error) {
-    console.error("Error creating custom order:", error)
-    return NextResponse.json({ error: "Failed to create order", details: error }, { status: 500 })
+    console.error("Server error:", error)
+    return NextResponse.json({ error: "Internal server error" }, { status: 500 })
   }
 }
