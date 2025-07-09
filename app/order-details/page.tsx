@@ -1,7 +1,6 @@
 "use client"
 
 import type React from "react"
-
 import { useState, useEffect } from "react"
 import { useSearchParams } from "next/navigation"
 import Header from "../../components/Header"
@@ -62,7 +61,6 @@ export default function OrderDetailsPage() {
           data: { session },
           error,
         } = await supabase.auth.getSession()
-
         if (error || !session) {
           alert("Please login first to place an order.")
           window.location.href = "/login"
@@ -136,7 +134,6 @@ export default function OrderDetailsPage() {
     if (selectedMealSet) {
       return selectedMealSet.price
     }
-
     let total = 0
     Object.values(selectedItems).forEach((categoryItems) => {
       categoryItems.forEach((item) => {
@@ -174,6 +171,7 @@ export default function OrderDetailsPage() {
         // Required fields for the database
         customer_name: formData.contactPerson || session.user.email || "Unknown Customer",
         total_amount: totalAmount,
+
         // Additional order details
         customer_id: null, // Will be set by the API if customer exists
         customer_email: formData.email,
@@ -191,6 +189,7 @@ export default function OrderDetailsPage() {
         payment_method: formData.paymentMethod,
         special_requests: formData.specialRequests,
         special_instructions: formData.specialRequests,
+
         // For custom orders, include selected items
         items: isCustomOrder ? selectedItems : [],
       }
