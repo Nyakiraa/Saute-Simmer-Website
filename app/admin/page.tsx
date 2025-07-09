@@ -134,6 +134,7 @@ function AdminDashboard() {
   const [isCateringModalOpen, setIsCateringModalOpen] = useState(false)
   const [isLocationModalOpen, setIsLocationModalOpen] = useState(false)
   const [isPaymentModalOpen, setIsPaymentModalOpen] = useState(false)
+  const [isOrderModalOpen, setIsOrderModalOpen] = useState(false)
 
   // Form states
   const [editingCustomer, setEditingCustomer] = useState<Customer | null>(null)
@@ -142,6 +143,7 @@ function AdminDashboard() {
   const [editingCatering, setEditingCatering] = useState<CateringService | null>(null)
   const [editingLocation, setEditingLocation] = useState<Location | null>(null)
   const [editingPayment, setEditingPayment] = useState<Payment | null>(null)
+  const [editingOrder, setEditingOrder] = useState<Order | null>(null)
 
   // Load data on component mount
   useEffect(() => {
@@ -406,6 +408,29 @@ function AdminDashboard() {
     setEditingPayment(null)
   }
 
+  const handleSaveOrder = async (orderData: Omit<Order, "id" | "created_at">) => {
+    try {
+      if (editingOrder) {
+        const response = await fetch(`/api/orders/${editingOrder.id}`, {
+          method: "PUT",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ status: orderData.status }),
+        })
+        if (response.ok) {
+          toast.success("Order status updated successfully")
+          await loadOrders()
+        } else {
+          throw new Error("Failed to update order")
+        }
+      }
+    } catch (error) {
+      console.error("Error saving order:", error)
+      toast.error("Failed to save order")
+    }
+    setIsOrderModalOpen(false)
+    setEditingOrder(null)
+  }
+
   // Filter functions
   const filteredCustomers = customers.filter(
     (customer) =>
@@ -647,6 +672,7 @@ function AdminDashboard() {
                         <TableHead>Amount</TableHead>
                         <TableHead>Status</TableHead>
                         <TableHead>Date</TableHead>
+                        <TableHead>Actions</TableHead>
                       </TableRow>
                     </TableHeader>
                     <TableBody>
@@ -677,6 +703,41 @@ function AdminDashboard() {
                               </Badge>
                             </TableCell>
                             <TableCell className="text-sm">{formatDate(order.created_at)}</TableCell>
+                            <TableCell>
+                              <Dialog
+                                open={isOrderModalOpen && editingOrder?.id === order.id}
+                                onOpenChange={(open) => {
+                                  setIsOrderModalOpen(open)
+                                  if (!open) setEditingOrder(null)
+                                }}
+                              >
+                                <DialogTrigger asChild>
+                                  <Button
+                                    variant="outline"
+                                    size="sm"
+                                    onClick={() => {
+                                      setEditingOrder(order)
+                                      setIsOrderModalOpen(true)
+                                    }}
+                                  >
+                                    <Edit className="h-4 w-4" />
+                                  </Button>
+                                </DialogTrigger>
+                                <DialogContent>
+                                  <DialogHeader>
+                                    <DialogTitle>Edit Order Status</DialogTitle>
+                                  </DialogHeader>
+                                  <OrderForm
+                                    order={editingOrder}
+                                    onSave={handleSaveOrder}
+                                    onCancel={() => {
+                                      setIsOrderModalOpen(false)
+                                      setEditingOrder(null)
+                                    }}
+                                  />
+                                </DialogContent>
+                              </Dialog>
+                            </TableCell>
                           </TableRow>
                         ))}
                     </TableBody>
@@ -1708,6 +1769,51 @@ function PaymentForm({
           onChange={(e) => setFormData({ ...formData, payment_date: e.target.value })}
           required
         />
+      </div>
+      <DialogFooter>
+        <Button type="button" variant="outline" onClick={onCancel}>
+          Cancel
+        </Button>
+        <Button type="submit">Save</Button>
+      </DialogFooter>
+    </form>
+  )
+}
+
+function OrderForm({
+  order,
+  onSave,
+  onCancel,
+}: {
+  order: Order | null
+  onSave: (data: Omit<Order, "id" | "created_at">) => void
+  onCancel: () => void
+}) {
+  const [formData, setFormData] = useState({
+    status: order?.status || "pending",
+  })
+
+  const handleSubmit = (e: React.FormEvent) => {
+    e.preventDefault()
+    onSave(formData as any)
+  }
+
+  return (
+    <form onSubmit={handleSubmit} className="space-y-4">
+      <div>
+        <Label htmlFor="status">Order Status</Label>
+        <Select value={formData.status} onValueChange={(value) => setFormData({ ...formData, status: value })}>
+          <SelectTrigger>
+            <SelectValue />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="pending">Pending</SelectItem>
+            <SelectItem value="confirmed">Confirmed</SelectItem>
+            <SelectItem value="preparing">Preparing</SelectItem>
+            <SelectItem value="delivered">Delivered</SelectItem>
+            <SelectItem value="cancelled">Cancelled</SelectItem>
+          </SelectContent>
+        </Select>
       </div>
       <DialogFooter>
         <Button type="button" variant="outline" onClick={onCancel}>
