@@ -101,6 +101,26 @@ export async function POST(request: NextRequest) {
       console.log("Created new customer:", customer.id)
     }
 
+    // Create location record for delivery address
+    let locationId = null
+    const { data: newLocation, error: locationError } = await supabase
+      .from("locations")
+      .insert({
+        name: `${customer.name}'s Event Location`,
+        address: body.delivery_address,
+        status: "active",
+        country: "Philippines",
+      })
+      .select("id")
+      .single()
+
+    if (!locationError) {
+      locationId = newLocation.id
+      console.log("Created location:", locationId)
+    } else {
+      console.error("Error creating location:", locationError)
+    }
+
     // Calculate total amount
     const totalAmount = mealSet.price * body.quantity
 
@@ -117,6 +137,7 @@ export async function POST(request: NextRequest) {
       event_type: body.event_type,
       event_date: body.event_date,
       delivery_address: body.delivery_address,
+      location_id: locationId, // Connect to location
       contact_person: body.contact_person || customer.name,
       contact_number: body.contact_number,
       payment_method: body.payment_method,
@@ -136,6 +157,35 @@ export async function POST(request: NextRequest) {
 
     console.log("Order created successfully:", order)
 
+    // Create catering service record
+    const cateringData = {
+      customer_id: customer.id,
+      customer_name: customer.name,
+      event_type: body.event_type,
+      event_date: body.event_date,
+      guest_count: body.quantity,
+      status: "pending",
+      location: body.delivery_address,
+      special_requests: body.special_requests || "",
+      order_id: order.id, // Connect to order
+      location_id: locationId, // Connect to location
+      payment_method: body.payment_method,
+    }
+
+    console.log("Creating catering service record:", cateringData)
+
+    const { data: cateringService, error: cateringError } = await supabase
+      .from("catering_services")
+      .insert([cateringData])
+      .select()
+      .single()
+
+    if (cateringError) {
+      console.error("Error creating catering service:", cateringError)
+    } else {
+      console.log("Created catering service:", cateringService.id)
+    }
+
     // Create payment record
     const paymentData = {
       order_id: order.id,
@@ -145,6 +195,7 @@ export async function POST(request: NextRequest) {
       payment_method: body.payment_method,
       transaction_id: `TXN-${order.id}-${Date.now()}`,
       payment_date: new Date().toISOString(),
+      status: "pending",
     }
 
     console.log("Creating payment record:", paymentData)
@@ -158,12 +209,16 @@ export async function POST(request: NextRequest) {
     if (paymentError) {
       console.error("Error creating payment:", paymentError)
       // Don't fail the order creation if payment record fails
+    } else {
+      console.log("Created payment record:", payment.id)
     }
 
     return NextResponse.json(
       {
         success: true,
         order,
+        catering_service: cateringService,
+        location_id: locationId,
         payment,
         message: "Meal set order created successfully",
       },
