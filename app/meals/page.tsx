@@ -12,7 +12,7 @@ interface MealSet {
   type: "premium" | "standard" | "basic"
   price: number
   description: string
-  items: any[]
+  items: string
   comment?: string
 }
 
@@ -114,8 +114,7 @@ export default function MealsPage() {
         }}
       >
         <div style={{ maxWidth: "800px", margin: "0 auto" }}>
-          <h1 style={{ fontSize: "3rem", marginBottom: "20px",fontFamily: "'Cinzel Decorative', serif",
-                    fontWeight: "700" }}>Our Meal Sets</h1>
+          <h1 style={{ fontSize: "3rem", marginBottom: "20px" }}>Our Meal Sets</h1>
           <p style={{ fontSize: "1.2rem", marginBottom: "0", opacity: "0.9" }}>
             Choose from our carefully curated meal sets for your next event.
           </p>
@@ -161,7 +160,7 @@ export default function MealsPage() {
               gap: "30px",
             }}
           >
-            {filteredMeals.slice(0, 3).map((meal) => (
+            {filteredMeals.map((meal) => (
               <div
                 key={meal.id}
                 style={{
@@ -341,6 +340,25 @@ export default function MealsPage() {
               <p style={{ fontSize: "1.1rem", marginBottom: "20px", color: "#666", lineHeight: "1.6" }}>
                 {selectedMeal.description}
               </p>
+
+              {/* Display meal items */}
+              <div style={{ marginBottom: "20px", textAlign: "left" }}>
+                <h3 style={{ fontSize: "1.2rem", marginBottom: "15px", color: "var(--primary-color)" }}>
+                  What's Included:
+                </h3>
+                <div
+                  style={{
+                    backgroundColor: "#f9f9f9",
+                    padding: "15px",
+                    borderRadius: "8px",
+                    fontSize: "0.95rem",
+                    lineHeight: "1.6",
+                    whiteSpace: "pre-line",
+                  }}
+                >
+                  {selectedMeal.items}
+                </div>
+              </div>
 
               {selectedMeal.comment && (
                 <div
