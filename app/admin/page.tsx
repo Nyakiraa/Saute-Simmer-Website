@@ -332,6 +332,73 @@ function AdminDashboard() {
     return <span className="text-gray-500">No items data</span>
   }
 
+  // Render actual order items function
+  const renderOrderItems = (items: any) => {
+    if (!items) return <span className="text-gray-500">No items selected</span>
+
+    // Handle array of items
+    if (Array.isArray(items)) {
+      if (items.length === 0) return <span className="text-gray-500">No items selected</span>
+
+      return (
+        <div className="space-y-2">
+          {items.map((item, index) => (
+            <div key={index} className="flex justify-between items-center p-2 bg-gray-50 rounded">
+              <div>
+                <span className="font-medium">{item.name || item}</span>
+                {item.category && <span className="text-sm text-gray-500 ml-2">({item.category})</span>}
+              </div>
+              {item.price && <span className="text-green-600 font-medium">₱{Number(item.price).toFixed(2)}</span>}
+            </div>
+          ))}
+        </div>
+      )
+    }
+
+    // Handle object format
+    if (typeof items === "object" && items !== null) {
+      const itemEntries = Object.entries(items)
+      if (itemEntries.length === 0) return <span className="text-gray-500">No items selected</span>
+
+      return (
+        <div className="space-y-2">
+          {itemEntries.map(([key, value], index) => (
+            <div key={index} className="flex justify-between items-center p-2 bg-gray-50 rounded">
+              <div>
+                <span className="font-medium">{key}</span>
+                {typeof value === "object" && value !== null && (
+                  <div className="text-sm text-gray-600 mt-1">{JSON.stringify(value)}</div>
+                )}
+              </div>
+              {typeof value === "number" && <span className="text-green-600 font-medium">₱{value.toFixed(2)}</span>}
+            </div>
+          ))}
+        </div>
+      )
+    }
+
+    // Handle string format (comma-separated items)
+    if (typeof items === "string") {
+      const itemList = items
+        .split(",")
+        .map((item) => item.trim())
+        .filter((item) => item.length > 0)
+      if (itemList.length === 0) return <span className="text-gray-500">No items selected</span>
+
+      return (
+        <div className="space-y-2">
+          {itemList.map((item, index) => (
+            <div key={index} className="p-2 bg-gray-50 rounded">
+              <span className="font-medium">{item}</span>
+            </div>
+          ))}
+        </div>
+      )
+    }
+
+    return <span className="text-gray-500">No items data available</span>
+  }
+
   // CRUD Operations for Customers
   const handleSaveCustomer = async (customerData: Omit<Customer, "id" | "created_at">) => {
     try {
@@ -1247,44 +1314,87 @@ function AdminDashboard() {
         {/* Order Items View Modal */}
         {viewingOrderItems && (
           <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
-            <div className="bg-white p-6 rounded-lg max-w-2xl w-full mx-4 max-h-[80vh] overflow-y-auto">
+            <div className="bg-white p-6 rounded-lg max-w-4xl w-full mx-4 max-h-[80vh] overflow-y-auto">
               <h3 className="text-lg font-semibold mb-4">Order Details - #{viewingOrderItems.order.id}</h3>
 
-              <div className="space-y-4">
-                <div className="grid grid-cols-2 gap-4">
-                  <div>
-                    <strong>Customer:</strong> {viewingOrderItems.order.customer_name}
-                  </div>
-                  <div>
-                    <strong>Email:</strong> {viewingOrderItems.order.customer_email}
-                  </div>
-                  <div>
-                    <strong>Contact:</strong> {viewingOrderItems.order.contact_number}
-                  </div>
-                  <div>
-                    <strong>Event Type:</strong> {viewingOrderItems.order.event_type}
-                  </div>
-                  <div>
-                    <strong>Event Date:</strong> {viewingOrderItems.order.event_date}
-                  </div>
-                  <div>
-                    <strong>Quantity:</strong> {viewingOrderItems.order.quantity} persons
+              <div className="space-y-6">
+                {/* Customer Information */}
+                <div className="bg-blue-50 p-4 rounded-lg">
+                  <h4 className="font-semibold mb-3 text-blue-800">Customer Information</h4>
+                  <div className="grid grid-cols-2 gap-4">
+                    <div>
+                      <strong>Customer:</strong> {viewingOrderItems.order.customer_name}
+                    </div>
+                    <div>
+                      <strong>Email:</strong> {viewingOrderItems.order.customer_email}
+                    </div>
+                    <div>
+                      <strong>Contact:</strong> {viewingOrderItems.order.contact_number}
+                    </div>
+                    <div>
+                      <strong>Contact Person:</strong> {viewingOrderItems.order.contact_person}
+                    </div>
                   </div>
                 </div>
 
+                {/* Event Information */}
+                <div className="bg-green-50 p-4 rounded-lg">
+                  <h4 className="font-semibold mb-3 text-green-800">Event Details</h4>
+                  <div className="grid grid-cols-2 gap-4">
+                    <div>
+                      <strong>Event Type:</strong> {viewingOrderItems.order.event_type}
+                    </div>
+                    <div>
+                      <strong>Event Date:</strong> {viewingOrderItems.order.event_date}
+                    </div>
+                    <div>
+                      <strong>Quantity:</strong> {viewingOrderItems.order.quantity} persons
+                    </div>
+                    <div>
+                      <strong>Order Type:</strong> {viewingOrderItems.order.order_type}
+                    </div>
+                  </div>
+                </div>
+
+                {/* Delivery Information */}
                 {viewingOrderItems.order.delivery_address && (
-                  <div>
-                    <strong>Delivery Address:</strong>
-                    <p className="text-gray-600 mt-1">{viewingOrderItems.order.delivery_address}</p>
+                  <div className="bg-yellow-50 p-4 rounded-lg">
+                    <h4 className="font-semibold mb-3 text-yellow-800">Delivery Information</h4>
+                    <div>
+                      <strong>Delivery Address:</strong>
+                      <p className="text-gray-600 mt-1">{viewingOrderItems.order.delivery_address}</p>
+                    </div>
                   </div>
                 )}
 
+                {/* Selected Items */}
+                <div className="bg-purple-50 p-4 rounded-lg">
+                  <h4 className="font-semibold mb-3 text-purple-800">Selected Items</h4>
+                  {viewingOrderItems.order.items && viewingOrderItems.order.items.length > 0 ? (
+                    renderOrderItems(viewingOrderItems.order.items)
+                  ) : (
+                    <p className="text-gray-500">No individual items selected</p>
+                  )}
+                </div>
+
+                {/* Meal Set Information */}
                 {viewingOrderItems.mealSet && (
-                  <div className="border-t pt-4">
-                    <h4 className="font-semibold mb-3">Meal Set: {viewingOrderItems.mealSet.name}</h4>
-                    <div className="bg-gray-50 p-4 rounded-lg">{renderMealItems(viewingOrderItems.mealSet.items)}</div>
+                  <div className="bg-red-50 p-4 rounded-lg">
+                    <h4 className="font-semibold mb-3 text-red-800">Meal Set: {viewingOrderItems.mealSet.name}</h4>
+                    <div className="mb-3">
+                      <strong>Description:</strong> {viewingOrderItems.mealSet.description}
+                    </div>
+                    <div className="mb-3">
+                      <strong>Type:</strong> <Badge variant="outline">{viewingOrderItems.mealSet.type}</Badge>
+                    </div>
+                    <div className="mb-3">
+                      <strong>Meal Set Contents:</strong>
+                    </div>
+                    <div className="bg-white p-3 rounded border">
+                      {renderMealItems(viewingOrderItems.mealSet.items)}
+                    </div>
                     {viewingOrderItems.mealSet.comment && (
-                      <div className="mt-3 p-3 bg-red-50 border border-red-200 rounded-lg">
+                      <div className="mt-3 p-3 bg-red-100 border border-red-200 rounded-lg">
                         <strong className="text-red-600">Special Note:</strong>
                         <p className="text-red-600 mt-1">{viewingOrderItems.mealSet.comment}</p>
                       </div>
@@ -1292,16 +1402,32 @@ function AdminDashboard() {
                   </div>
                 )}
 
+                {/* Special Requests */}
                 {viewingOrderItems.order.special_requests && (
-                  <div className="border-t pt-4">
-                    <strong>Special Requests:</strong>
-                    <p className="text-gray-600 mt-1">{viewingOrderItems.order.special_requests}</p>
+                  <div className="bg-orange-50 p-4 rounded-lg">
+                    <h4 className="font-semibold mb-3 text-orange-800">Special Requests</h4>
+                    <p className="text-gray-600">{viewingOrderItems.order.special_requests}</p>
                   </div>
                 )}
 
-                <div className="border-t pt-4">
-                  <div className="text-xl font-bold text-green-600">
-                    Total: ₱{Number(viewingOrderItems.order.total_amount).toFixed(2)}
+                {/* Payment Information */}
+                <div className="bg-gray-50 p-4 rounded-lg">
+                  <h4 className="font-semibold mb-3 text-gray-800">Payment Information</h4>
+                  <div className="grid grid-cols-2 gap-4">
+                    <div>
+                      <strong>Payment Method:</strong> {viewingOrderItems.order.payment_method || "Not specified"}
+                    </div>
+                    <div>
+                      <strong>Order Status:</strong>
+                      <Badge variant={getStatusBadgeVariant(viewingOrderItems.order.status)} className="ml-2">
+                        {viewingOrderItems.order.status}
+                      </Badge>
+                    </div>
+                  </div>
+                  <div className="mt-4 pt-4 border-t border-gray-200">
+                    <div className="text-2xl font-bold text-green-600">
+                      Total Amount: ₱{Number(viewingOrderItems.order.total_amount).toFixed(2)}
+                    </div>
                   </div>
                 </div>
               </div>
@@ -1871,7 +1997,7 @@ function PaymentForm({
         <Label htmlFor="paymentMethod">Payment Method</Label>
         <Select
           value={formData.payment_method}
-          onValueChange={(value) => setFormData({ ...formData, payment_method: value })}
+          onChange={(value) => setFormData({ ...formData, payment_method: value })}
         >
           <SelectTrigger>
             <SelectValue />
