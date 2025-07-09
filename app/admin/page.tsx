@@ -1,4 +1,5 @@
 "use client"
+
 import type React from "react"
 import { useState, useEffect } from "react"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
@@ -491,6 +492,18 @@ function AdminDashboard() {
     }
   }
 
+  // Calculate revenue properly
+  const totalRevenue = orders
+    .filter((order) => order.status !== "cancelled")
+    .reduce((sum, order) => sum + Number(order.total_amount || 0), 0)
+
+  const paidRevenue = payments
+    .filter((payment) => payment.status === "paid")
+    .reduce((sum, payment) => sum + Number(payment.amount || 0), 0)
+
+  // Use the higher of the two calculations for more accurate revenue
+  const actualRevenue = Math.max(totalRevenue, paidRevenue)
+
   if (isLoading) {
     return (
       <div className="min-h-screen bg-gradient-to-br from-red-50 to-orange-50 flex items-center justify-center">
@@ -508,11 +521,7 @@ function AdminDashboard() {
         {/* Header */}
         <div className="mb-8 flex items-center justify-between">
           <div className="flex items-center gap-4">
-            <img
-              src="/placeholder.svg?height=48&width=48"
-              alt="Saute and Simmer Logo"
-              className="h-12 w-auto object-contain"
-            />
+            <img src="/images/redlogo.png" alt="Saute and Simmer Logo" className="h-12 w-auto object-contain" />
             <div>
               <h1 className="text-4xl font-bold text-red-800 mb-2">Admin Dashboard</h1>
               <p className="text-gray-600">Comprehensive catering management system</p>
@@ -580,6 +589,7 @@ function AdminDashboard() {
                 </CardHeader>
                 <CardContent>
                   <div className="text-2xl font-bold">{customers.length}</div>
+                  <p className="text-xs text-muted-foreground">Registered users</p>
                 </CardContent>
               </Card>
               <Card>
@@ -589,6 +599,7 @@ function AdminDashboard() {
                 </CardHeader>
                 <CardContent>
                   <div className="text-2xl font-bold">{items.length}</div>
+                  <p className="text-xs text-muted-foreground">Available items</p>
                 </CardContent>
               </Card>
               <Card>
@@ -597,7 +608,10 @@ function AdminDashboard() {
                   <ShoppingCart className="h-4 w-4 text-muted-foreground" />
                 </CardHeader>
                 <CardContent>
-                  <div className="text-2xl font-bold">{orders.filter((o) => o.status !== "cancelled").length}</div>
+                  <div className="text-2xl font-bold">
+                    {orders.filter((o) => o.status !== "cancelled" && o.status !== "delivered").length}
+                  </div>
+                  <p className="text-xs text-muted-foreground">Orders in progress</p>
                 </CardContent>
               </Card>
               <Card>
@@ -606,9 +620,10 @@ function AdminDashboard() {
                   <CreditCard className="h-4 w-4 text-muted-foreground" />
                 </CardHeader>
                 <CardContent>
-                  <div className="text-2xl font-bold">
-                    {formatCurrency(payments.filter((p) => p.status === "paid").reduce((sum, p) => sum + p.amount, 0))}
-                  </div>
+                  <div className="text-2xl font-bold text-green-600">{formatCurrency(actualRevenue)}</div>
+                  <p className="text-xs text-muted-foreground">
+                    From {orders.filter((o) => o.status !== "cancelled").length} orders
+                  </p>
                 </CardContent>
               </Card>
             </div>
@@ -637,30 +652,35 @@ function AdminDashboard() {
                       </TableRow>
                     </TableHeader>
                     <TableBody>
-                      {orders.slice(0, 10).map((order) => (
-                        <TableRow key={order.id}>
-                          <TableCell className="font-medium">#{order.id}</TableCell>
-                          <TableCell>
-                            <div>
-                              <div className="font-medium">{order.customer_name}</div>
-                              <div className="text-sm text-gray-500">{order.customer_email}</div>
-                            </div>
-                          </TableCell>
-                          <TableCell>
-                            <div>
-                              <div className="font-medium">{order.meal_set_name || order.order_type}</div>
-                              <div className="text-sm text-gray-500">Qty: {order.quantity}</div>
-                            </div>
-                          </TableCell>
-                          <TableCell className="font-medium">{formatCurrency(order.total_amount)}</TableCell>
-                          <TableCell>
-                            <Badge variant={getStatusBadgeVariant(order.status)} className="capitalize">
-                              {order.status}
-                            </Badge>
-                          </TableCell>
-                          <TableCell className="text-sm">{formatDate(order.created_at)}</TableCell>
-                        </TableRow>
-                      ))}
+                      {orders
+                        .sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime())
+                        .slice(0, 10)
+                        .map((order) => (
+                          <TableRow key={order.id}>
+                            <TableCell className="font-medium">#{order.id}</TableCell>
+                            <TableCell>
+                              <div>
+                                <div className="font-medium">{order.customer_name}</div>
+                                <div className="text-sm text-gray-500">{order.customer_email}</div>
+                              </div>
+                            </TableCell>
+                            <TableCell>
+                              <div>
+                                <div className="font-medium">{order.meal_set_name || order.order_type}</div>
+                                <div className="text-sm text-gray-500">Qty: {order.quantity}</div>
+                              </div>
+                            </TableCell>
+                            <TableCell className="font-medium text-green-600">
+                              {formatCurrency(order.total_amount)}
+                            </TableCell>
+                            <TableCell>
+                              <Badge variant={getStatusBadgeVariant(order.status)} className="capitalize">
+                                {order.status}
+                              </Badge>
+                            </TableCell>
+                            <TableCell className="text-sm">{formatDate(order.created_at)}</TableCell>
+                          </TableRow>
+                        ))}
                     </TableBody>
                   </Table>
                 )}
