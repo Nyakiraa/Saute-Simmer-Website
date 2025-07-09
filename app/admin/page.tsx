@@ -1997,7 +1997,7 @@ function PaymentForm({
         <Label htmlFor="paymentMethod">Payment Method</Label>
         <Select
           value={formData.payment_method}
-          onChange={(value) => setFormData({ ...formData, payment_method: value })}
+          onValueChange={(value) => setFormData({ ...formData, payment_method: value })}
         >
           <SelectTrigger>
             <SelectValue />
