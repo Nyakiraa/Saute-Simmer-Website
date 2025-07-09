@@ -1,6 +1,4 @@
 "use client"
-
-import type React from "react"
 import { useState, useEffect } from "react"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
@@ -36,7 +34,6 @@ import {
 import { useRouter } from "next/navigation"
 import { createClient } from "@supabase/supabase-js"
 import AdminAuthWrapper from "@/components/admin-auth-wrapper"
-import { toast } from "react-hot-toast"
 
 const supabase = createClient(process.env.NEXT_PUBLIC_SUPABASE_URL!, process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!)
 
@@ -176,6 +173,16 @@ function AdminDashboard() {
   const [editingPayment, setEditingPayment] = useState<Payment | null>(null)
   const [activeTab, setActiveTab] = useState("overview")
 
+  // Simple notification function to replace toast
+  const showNotification = (message: string, type: "success" | "error" = "success") => {
+    // Simple alert for now - can be replaced with a proper toast library later
+    if (type === "error") {
+      alert(`Error: ${message}`)
+    } else {
+      alert(`Success: ${message}`)
+    }
+  }
+
   // Load data on component mount
   useEffect(() => {
     fetchAllData()
@@ -299,9 +306,11 @@ function AdminDashboard() {
       if (response.ok) {
         fetchCustomers()
         setNewCustomer({ name: "", email: "", phone: "" })
+        showNotification("Customer added successfully")
       }
     } catch (error) {
       console.error("Error adding customer:", error)
+      showNotification("Failed to add customer", "error")
     }
   }
 
@@ -315,9 +324,11 @@ function AdminDashboard() {
       if (response.ok) {
         fetchItems()
         setNewItem({ name: "", description: "", price: 0, category: "", available: true })
+        showNotification("Item added successfully")
       }
     } catch (error) {
       console.error("Error adding item:", error)
+      showNotification("Failed to add item", "error")
     }
   }
 
@@ -331,9 +342,11 @@ function AdminDashboard() {
       if (response.ok) {
         fetchMealSets()
         setNewMealSet({ name: "", description: "", price: 0, items: [], available: true })
+        showNotification("Meal set added successfully")
       }
     } catch (error) {
       console.error("Error adding meal set:", error)
+      showNotification("Failed to add meal set", "error")
     }
   }
 
@@ -354,9 +367,11 @@ function AdminDashboard() {
           status: "pending",
           location: "",
         })
+        showNotification("Catering service added successfully")
       }
     } catch (error) {
       console.error("Error adding catering service:", error)
+      showNotification("Failed to add catering service", "error")
     }
   }
 
@@ -378,9 +393,11 @@ function AdminDashboard() {
           zip_code: "",
           country: "USA",
         })
+        showNotification("Location added successfully")
       }
     } catch (error) {
       console.error("Error adding location:", error)
+      showNotification("Failed to add location", "error")
     }
   }
 
@@ -410,9 +427,11 @@ function AdminDashboard() {
             fetchPayments()
             break
         }
+        showNotification(`${type.slice(0, -1)} deleted successfully`)
       }
     } catch (error) {
       console.error(`Error deleting ${type}:`, error)
+      showNotification(`Failed to delete ${type.slice(0, -1)}`, "error")
     }
   }
 
@@ -426,7 +445,7 @@ function AdminDashboard() {
           body: JSON.stringify(customerData),
         })
         if (response.ok) {
-          toast.success("Customer updated successfully")
+          showNotification("Customer updated successfully")
           await fetchCustomers()
         } else {
           throw new Error("Failed to update customer")
@@ -434,7 +453,7 @@ function AdminDashboard() {
       }
     } catch (error) {
       console.error("Error saving customer:", error)
-      toast.error("Failed to save customer")
+      showNotification("Failed to save customer", "error")
     }
     setIsCustomerModalOpen(false)
     setEditingCustomer(null)
@@ -450,7 +469,7 @@ function AdminDashboard() {
           body: JSON.stringify(itemData),
         })
         if (response.ok) {
-          toast.success("Item updated successfully")
+          showNotification("Item updated successfully")
           await fetchItems()
         } else {
           throw new Error("Failed to update item")
@@ -458,7 +477,7 @@ function AdminDashboard() {
       }
     } catch (error) {
       console.error("Error saving item:", error)
-      toast.error("Failed to save item")
+      showNotification("Failed to save item", "error")
     }
     setIsItemModalOpen(false)
     setEditingItem(null)
@@ -474,7 +493,7 @@ function AdminDashboard() {
           body: JSON.stringify(mealSetData),
         })
         if (response.ok) {
-          toast.success("Meal set updated successfully")
+          showNotification("Meal set updated successfully")
           await fetchMealSets()
         } else {
           throw new Error("Failed to update meal set")
@@ -482,7 +501,7 @@ function AdminDashboard() {
       }
     } catch (error) {
       console.error("Error saving meal set:", error)
-      toast.error("Failed to save meal set")
+      showNotification("Failed to save meal set", "error")
     }
     setIsMealSetModalOpen(false)
     setEditingMealSet(null)
@@ -498,7 +517,7 @@ function AdminDashboard() {
           body: JSON.stringify(cateringData),
         })
         if (response.ok) {
-          toast.success("Catering service updated successfully")
+          showNotification("Catering service updated successfully")
           await fetchCateringServices()
         } else {
           throw new Error("Failed to update catering service")
@@ -506,7 +525,7 @@ function AdminDashboard() {
       }
     } catch (error) {
       console.error("Error saving catering service:", error)
-      toast.error("Failed to save catering service")
+      showNotification("Failed to save catering service", "error")
     }
     setIsCateringModalOpen(false)
     setEditingCatering(null)
@@ -522,7 +541,7 @@ function AdminDashboard() {
           body: JSON.stringify(locationData),
         })
         if (response.ok) {
-          toast.success("Location updated successfully")
+          showNotification("Location updated successfully")
           await fetchLocations()
         } else {
           throw new Error("Failed to update location")
@@ -530,7 +549,7 @@ function AdminDashboard() {
       }
     } catch (error) {
       console.error("Error saving location:", error)
-      toast.error("Failed to save location")
+      showNotification("Failed to save location", "error")
     }
     setIsLocationModalOpen(false)
     setEditingLocation(null)
@@ -546,7 +565,7 @@ function AdminDashboard() {
           body: JSON.stringify(paymentData),
         })
         if (response.ok) {
-          toast.success("Payment updated successfully")
+          showNotification("Payment updated successfully")
           await fetchPayments()
         } else {
           throw new Error("Failed to update payment")
@@ -554,7 +573,7 @@ function AdminDashboard() {
       }
     } catch (error) {
       console.error("Error saving payment:", error)
-      toast.error("Failed to save payment")
+      showNotification("Failed to save payment", "error")
     }
     setIsPaymentModalOpen(false)
     setEditingPayment(null)
@@ -576,7 +595,7 @@ function AdminDashboard() {
   const filteredMealSets = mealSets.filter(
     (mealSet) =>
       mealSet.name?.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      mealSet.type?.toLowerCase().includes(searchTerm.toLowerCase()),
+      mealSet.description?.toLowerCase().includes(searchTerm.toLowerCase()),
   )
 
   const filteredCateringServices = cateringServices.filter(
@@ -1235,615 +1254,6 @@ function AdminDashboard() {
         </Tabs>
       </main>
     </div>
-  )
-}
-
-// Customer Form Component
-function CustomerForm({
-  customer,
-  onSave,
-  onCancel,
-}: {
-  customer: Customer | null
-  onSave: (data: Omit<Customer, "id" | "created_at">) => void
-  onCancel: () => void
-}) {
-  const [formData, setFormData] = useState({
-    name: customer?.name || "",
-    email: customer?.email || "",
-    phone: customer?.phone || "",
-    address: customer?.address || "",
-  })
-
-  const handleSubmit = (e: React.FormEvent) => {
-    e.preventDefault()
-    onSave(formData)
-  }
-
-  return (
-    <form onSubmit={handleSubmit} className="space-y-4">
-      <div>
-        <Label htmlFor="name">Name</Label>
-        <Input
-          id="name"
-          value={formData.name}
-          onChange={(e) => setFormData({ ...formData, name: e.target.value })}
-          required
-        />
-      </div>
-      <div>
-        <Label htmlFor="email">Email</Label>
-        <Input
-          id="email"
-          type="email"
-          value={formData.email}
-          onChange={(e) => setFormData({ ...formData, email: e.target.value })}
-          required
-        />
-      </div>
-      <div>
-        <Label htmlFor="phone">Phone</Label>
-        <Input
-          id="phone"
-          value={formData.phone}
-          onChange={(e) => setFormData({ ...formData, phone: e.target.value })}
-          required
-        />
-      </div>
-      <div>
-        <Label htmlFor="address">Address</Label>
-        <Textarea
-          id="address"
-          value={formData.address}
-          onChange={(e) => setFormData({ ...formData, address: e.target.value })}
-          required
-        />
-      </div>
-      <DialogFooter>
-        <Button type="button" variant="outline" onClick={onCancel}>
-          Cancel
-        </Button>
-        <Button type="submit">Save</Button>
-      </DialogFooter>
-    </form>
-  )
-}
-
-// Item Form Component
-function ItemForm({
-  item,
-  onSave,
-  onCancel,
-}: {
-  item: Item | null
-  onSave: (data: Omit<Item, "id" | "created_at">) => void
-  onCancel: () => void
-}) {
-  const [formData, setFormData] = useState({
-    name: item?.name || "",
-    category: item?.category || "snack",
-    price: item?.price || 0,
-    description: item?.description || "",
-    status: item?.status || "available",
-  })
-
-  const handleSubmit = (e: React.FormEvent) => {
-    e.preventDefault()
-    onSave(formData)
-  }
-
-  return (
-    <form onSubmit={handleSubmit} className="space-y-4">
-      <div>
-        <Label htmlFor="name">Name</Label>
-        <Input
-          id="name"
-          value={formData.name}
-          onChange={(e) => setFormData({ ...formData, name: e.target.value })}
-          required
-        />
-      </div>
-      <div>
-        <Label htmlFor="category">Category</Label>
-        <Select value={formData.category} onValueChange={(value) => setFormData({ ...formData, category: value })}>
-          <SelectTrigger>
-            <SelectValue />
-          </SelectTrigger>
-          <SelectContent>
-            <SelectItem value="snack">Snack</SelectItem>
-            <SelectItem value="main">Main Course</SelectItem>
-            <SelectItem value="side">Side Dish</SelectItem>
-            <SelectItem value="beverage">Beverage</SelectItem>
-          </SelectContent>
-        </Select>
-      </div>
-      <div>
-        <Label htmlFor="price">Price (₱)</Label>
-        <Input
-          id="price"
-          type="number"
-          value={formData.price}
-          onChange={(e) => setFormData({ ...formData, price: Number(e.target.value) })}
-          required
-        />
-      </div>
-      <div>
-        <Label htmlFor="status">Status</Label>
-        <Select value={formData.status} onValueChange={(value) => setFormData({ ...formData, status: value })}>
-          <SelectTrigger>
-            <SelectValue />
-          </SelectTrigger>
-          <SelectContent>
-            <SelectItem value="available">Available</SelectItem>
-            <SelectItem value="unavailable">Unavailable</SelectItem>
-          </SelectContent>
-        </Select>
-      </div>
-      <div>
-        <Label htmlFor="description">Description</Label>
-        <Textarea
-          id="description"
-          value={formData.description}
-          onChange={(e) => setFormData({ ...formData, description: e.target.value })}
-        />
-      </div>
-      <DialogFooter>
-        <Button type="button" variant="outline" onClick={onCancel}>
-          Cancel
-        </Button>
-        <Button type="submit">Save</Button>
-      </DialogFooter>
-    </form>
-  )
-}
-
-// Meal Set Form Component
-function MealSetForm({
-  mealSet,
-  items,
-  onSave,
-  onCancel,
-}: {
-  mealSet: MealSet | null
-  items: Item[]
-  onSave: (data: Omit<MealSet, "id" | "created_at">) => void
-  onCancel: () => void
-}) {
-  const [formData, setFormData] = useState({
-    name: mealSet?.name || "",
-    type: mealSet?.type || "standard",
-    price: mealSet?.price || 0,
-    description: mealSet?.description || "",
-    items: mealSet?.items || "",
-    comment: mealSet?.comment || "",
-  })
-
-  const handleSubmit = (e: React.FormEvent) => {
-    e.preventDefault()
-    onSave(formData)
-  }
-
-  return (
-    <form onSubmit={handleSubmit} className="space-y-4">
-      <div>
-        <Label htmlFor="name">Set Name</Label>
-        <Input
-          id="name"
-          value={formData.name}
-          onChange={(e) => setFormData({ ...formData, name: e.target.value })}
-          required
-        />
-      </div>
-      <div>
-        <Label htmlFor="type">Type</Label>
-        <Select value={formData.type} onValueChange={(value) => setFormData({ ...formData, type: value })}>
-          <SelectTrigger>
-            <SelectValue />
-          </SelectTrigger>
-          <SelectContent>
-            <SelectItem value="basic">Basic</SelectItem>
-            <SelectItem value="standard">Standard</SelectItem>
-            <SelectItem value="premium">Premium</SelectItem>
-          </SelectContent>
-        </Select>
-      </div>
-      <div>
-        <Label htmlFor="price">Price (₱)</Label>
-        <Input
-          id="price"
-          type="number"
-          value={formData.price}
-          onChange={(e) => setFormData({ ...formData, price: Number(e.target.value) })}
-          required
-        />
-      </div>
-      <div>
-        <Label htmlFor="description">Description</Label>
-        <Textarea
-          id="description"
-          value={formData.description}
-          onChange={(e) => setFormData({ ...formData, description: e.target.value })}
-        />
-      </div>
-      <div>
-        <Label htmlFor="items">Items (comma-separated)</Label>
-        <Textarea
-          id="items"
-          value={formData.items}
-          onChange={(e) => setFormData({ ...formData, items: e.target.value })}
-          placeholder="e.g., Grilled Chicken, Rice, Vegetables"
-        />
-      </div>
-      <div>
-        <Label htmlFor="comment">Additional Notes</Label>
-        <Textarea
-          id="comment"
-          value={formData.comment}
-          onChange={(e) => setFormData({ ...formData, comment: e.target.value })}
-        />
-      </div>
-      <DialogFooter>
-        <Button type="button" variant="outline" onClick={onCancel}>
-          Cancel
-        </Button>
-        <Button type="submit">Save</Button>
-      </DialogFooter>
-    </form>
-  )
-}
-
-function CateringServiceForm({
-  service,
-  customers,
-  onSave,
-  onCancel,
-}: {
-  service: CateringService | null
-  customers: Customer[]
-  onSave: (data: Omit<CateringService, "id" | "created_at">) => void
-  onCancel: () => void
-}) {
-  const [formData, setFormData] = useState({
-    customer_id: service?.customer_id || 0,
-    customer_name: service?.customer_name || "",
-    event_type: service?.event_type || "",
-    event_date: service?.event_date || "",
-    guest_count: service?.guest_count || 0,
-    status: service?.status || "pending",
-    location: service?.location || "",
-    special_requests: service?.special_requests || "",
-    order_id: service?.order_id || undefined,
-    location_id: service?.location_id || undefined,
-    payment_method: service?.payment_method || "",
-  })
-
-  const handleCustomerChange = (customerId: string) => {
-    const customer = customers.find((c) => c.id === Number.parseInt(customerId))
-    setFormData({
-      ...formData,
-      customer_id: Number.parseInt(customerId),
-      customer_name: customer?.name || "",
-    })
-  }
-
-  const handleSubmit = (e: React.FormEvent) => {
-    e.preventDefault()
-    onSave(formData)
-  }
-
-  return (
-    <form onSubmit={handleSubmit} className="space-y-4">
-      <div>
-        <Label htmlFor="customer">Customer</Label>
-        <Select value={formData.customer_id.toString()} onValueChange={handleCustomerChange}>
-          <SelectTrigger>
-            <SelectValue placeholder="Select customer" />
-          </SelectTrigger>
-          <SelectContent>
-            {customers.map((customer) => (
-              <SelectItem key={customer.id} value={customer.id.toString()}>
-                {customer.name}
-              </SelectItem>
-            ))}
-          </SelectContent>
-        </Select>
-      </div>
-      <div>
-        <Label htmlFor="eventType">Event Type</Label>
-        <Input
-          id="eventType"
-          value={formData.event_type}
-          onChange={(e) => setFormData({ ...formData, event_type: e.target.value })}
-          required
-        />
-      </div>
-      <div>
-        <Label htmlFor="eventDate">Event Date</Label>
-        <Input
-          id="eventDate"
-          type="date"
-          value={formData.event_date}
-          onChange={(e) => setFormData({ ...formData, event_date: e.target.value })}
-          required
-        />
-      </div>
-      <div>
-        <Label htmlFor="guestCount">Guest Count</Label>
-        <Input
-          id="guestCount"
-          type="number"
-          value={formData.guest_count}
-          onChange={(e) => setFormData({ ...formData, guest_count: Number(e.target.value) })}
-          required
-        />
-      </div>
-      <div>
-        <Label htmlFor="status">Status</Label>
-        <Select value={formData.status} onValueChange={(value) => setFormData({ ...formData, status: value })}>
-          <SelectTrigger>
-            <SelectValue />
-          </SelectTrigger>
-          <SelectContent>
-            <SelectItem value="pending">Pending</SelectItem>
-            <SelectItem value="confirmed">Confirmed</SelectItem>
-            <SelectItem value="completed">Completed</SelectItem>
-            <SelectItem value="cancelled">Cancelled</SelectItem>
-          </SelectContent>
-        </Select>
-      </div>
-      <div>
-        <Label htmlFor="location">Location</Label>
-        <Textarea
-          id="location"
-          value={formData.location}
-          onChange={(e) => setFormData({ ...formData, location: e.target.value })}
-          required
-        />
-      </div>
-      <div>
-        <Label htmlFor="paymentMethod">Payment Method</Label>
-        <Input
-          id="paymentMethod"
-          value={formData.payment_method}
-          onChange={(e) => setFormData({ ...formData, payment_method: e.target.value })}
-        />
-      </div>
-      <div>
-        <Label htmlFor="specialRequests">Special Requests</Label>
-        <Textarea
-          id="specialRequests"
-          value={formData.special_requests}
-          onChange={(e) => setFormData({ ...formData, special_requests: e.target.value })}
-        />
-      </div>
-      <DialogFooter>
-        <Button type="button" variant="outline" onClick={onCancel}>
-          Cancel
-        </Button>
-        <Button type="submit">Save</Button>
-      </DialogFooter>
-    </form>
-  )
-}
-
-function LocationForm({
-  location,
-  onSave,
-  onCancel,
-}: {
-  location: Location | null
-  onSave: (data: Omit<Location, "id" | "created_at">) => void
-  onCancel: () => void
-}) {
-  const [formData, setFormData] = useState({
-    name: location?.name || "",
-    address: location?.address || "",
-    phone: location?.phone || "",
-    status: location?.status || "active",
-    state: location?.state || "",
-    zip_code: location?.zip_code || "",
-    country: location?.country || "Philippines",
-  })
-
-  const handleSubmit = (e: React.FormEvent) => {
-    e.preventDefault()
-    onSave(formData)
-  }
-
-  return (
-    <form onSubmit={handleSubmit} className="space-y-4">
-      <div>
-        <Label htmlFor="name">Location Name</Label>
-        <Input
-          id="name"
-          value={formData.name}
-          onChange={(e) => setFormData({ ...formData, name: e.target.value })}
-          required
-        />
-      </div>
-      <div>
-        <Label htmlFor="address">Address</Label>
-        <Textarea
-          id="address"
-          value={formData.address}
-          onChange={(e) => setFormData({ ...formData, address: e.target.value })}
-          required
-        />
-      </div>
-      <div>
-        <Label htmlFor="state">State/Province</Label>
-        <Input
-          id="state"
-          value={formData.state}
-          onChange={(e) => setFormData({ ...formData, state: e.target.value })}
-        />
-      </div>
-      <div>
-        <Label htmlFor="zipCode">ZIP Code</Label>
-        <Input
-          id="zipCode"
-          value={formData.zip_code}
-          onChange={(e) => setFormData({ ...formData, zip_code: e.target.value })}
-        />
-      </div>
-      <div>
-        <Label htmlFor="phone">Phone</Label>
-        <Input
-          id="phone"
-          value={formData.phone}
-          onChange={(e) => setFormData({ ...formData, phone: e.target.value })}
-        />
-      </div>
-      <div>
-        <Label htmlFor="status">Status</Label>
-        <Select value={formData.status} onValueChange={(value) => setFormData({ ...formData, status: value })}>
-          <SelectTrigger>
-            <SelectValue />
-          </SelectTrigger>
-          <SelectContent>
-            <SelectItem value="active">Active</SelectItem>
-            <SelectItem value="inactive">Inactive</SelectItem>
-          </SelectContent>
-        </Select>
-      </div>
-      <div>
-        <Label htmlFor="country">Country</Label>
-        <Input
-          id="country"
-          value={formData.country}
-          onChange={(e) => setFormData({ ...formData, country: e.target.value })}
-          required
-        />
-      </div>
-      <DialogFooter>
-        <Button type="button" variant="outline" onClick={onCancel}>
-          Cancel
-        </Button>
-        <Button type="submit">Save</Button>
-      </DialogFooter>
-    </form>
-  )
-}
-
-function PaymentForm({
-  payment,
-  customers,
-  onSave,
-  onCancel,
-}: {
-  payment: Payment | null
-  customers: Customer[]
-  onSave: (data: Omit<Payment, "id" | "created_at">) => void
-  onCancel: () => void
-}) {
-  const [formData, setFormData] = useState({
-    customer_id: payment?.customer_id || 0,
-    customer_name: payment?.customer_name || "",
-    amount: payment?.amount || 0,
-    transaction_id: payment?.transaction_id || "",
-    payment_date: payment?.payment_date || new Date().toISOString().split("T")[0],
-    order_id: payment?.order_id || undefined,
-    payment_method: payment?.payment_method || "",
-    status: payment?.status || "pending",
-  })
-
-  const handleCustomerChange = (customerId: string) => {
-    const customer = customers.find((c) => c.id === Number.parseInt(customerId))
-    setFormData({
-      ...formData,
-      customer_id: Number.parseInt(customerId),
-      customer_name: customer?.name || "",
-    })
-  }
-
-  const handleSubmit = (e: React.FormEvent) => {
-    e.preventDefault()
-    onSave(formData)
-  }
-
-  return (
-    <form onSubmit={handleSubmit} className="space-y-4">
-      <div>
-        <Label htmlFor="customer">Customer</Label>
-        <Select value={formData.customer_id.toString()} onValueChange={handleCustomerChange}>
-          <SelectTrigger>
-            <SelectValue placeholder="Select customer" />
-          </SelectTrigger>
-          <SelectContent>
-            {customers.map((customer) => (
-              <SelectItem key={customer.id} value={customer.id.toString()}>
-                {customer.name}
-              </SelectItem>
-            ))}
-          </SelectContent>
-        </Select>
-      </div>
-      <div>
-        <Label htmlFor="amount">Amount (₱)</Label>
-        <Input
-          id="amount"
-          type="number"
-          value={formData.amount}
-          onChange={(e) => setFormData({ ...formData, amount: Number(e.target.value) })}
-          required
-        />
-      </div>
-      <div>
-        <Label htmlFor="paymentMethod">Payment Method</Label>
-        <Select
-          value={formData.payment_method}
-          onChange={(value) => setFormData({ ...formData, payment_method: value })}
-        >
-          <SelectTrigger>
-            <SelectValue />
-          </SelectTrigger>
-          <SelectContent>
-            <SelectItem value="cash">Cash</SelectItem>
-            <SelectItem value="bank">Bank Transfer</SelectItem>
-            <SelectItem value="gcash">GCash</SelectItem>
-            <SelectItem value="credit">Credit Card</SelectItem>
-          </SelectContent>
-        </Select>
-      </div>
-      <div>
-        <Label htmlFor="status">Status</Label>
-        <Select value={formData.status} onValueChange={(value) => setFormData({ ...formData, status: value })}>
-          <SelectTrigger>
-            <SelectValue />
-          </SelectTrigger>
-          <SelectContent>
-            <SelectItem value="pending">Pending</SelectItem>
-            <SelectItem value="paid">Paid</SelectItem>
-            <SelectItem value="cancelled">Cancelled</SelectItem>
-            <SelectItem value="refunded">Refunded</SelectItem>
-          </SelectContent>
-        </Select>
-      </div>
-      <div>
-        <Label htmlFor="transactionId">Transaction ID</Label>
-        <Input
-          id="transactionId"
-          value={formData.transaction_id}
-          onChange={(e) => setFormData({ ...formData, transaction_id: e.target.value })}
-        />
-      </div>
-      <div>
-        <Label htmlFor="paymentDate">Payment Date</Label>
-        <Input
-          id="paymentDate"
-          type="date"
-          value={formData.payment_date}
-          onChange={(e) => setFormData({ ...formData, payment_date: e.target.value })}
-          required
-        />
-      </div>
-      <DialogFooter>
-        <Button type="button" variant="outline" onClick={onCancel}>
-          Cancel
-        </Button>
-        <Button type="submit">Save</Button>
-      </DialogFooter>
-    </form>
   )
 }
 
