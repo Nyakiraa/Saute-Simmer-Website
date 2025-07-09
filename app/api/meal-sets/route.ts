@@ -1,24 +1,23 @@
 import { type NextRequest, NextResponse } from "next/server"
-import { createServerClient } from "@/lib/supabase"
+import { createClient } from "@supabase/supabase-js"
+
+const supabase = createClient(process.env.NEXT_PUBLIC_SUPABASE_URL!, process.env.SUPABASE_SERVICE_ROLE_KEY!)
 
 export async function GET() {
   try {
-    const supabase = createServerClient()
-
     const { data: mealSets, error } = await supabase
       .from("meal_sets")
       .select("*")
-      .order("type", { ascending: false })
-      .order("price", { ascending: true })
+      .order("created_at", { ascending: false })
 
     if (error) {
-      console.error("Database error:", error)
+      console.error("Error fetching meal sets:", error)
       return NextResponse.json({ error: "Failed to fetch meal sets" }, { status: 500 })
     }
 
-    return NextResponse.json(mealSets || [])
+    return NextResponse.json(mealSets)
   } catch (error) {
-    console.error("Server error:", error)
+    console.error("Error in GET /api/meal-sets:", error)
     return NextResponse.json({ error: "Internal server error" }, { status: 500 })
   }
 }
@@ -26,37 +25,17 @@ export async function GET() {
 export async function POST(request: NextRequest) {
   try {
     const body = await request.json()
-    const supabase = createServerClient()
 
-    // Validate required fields
-    const { name, type, price } = body
+    const { data: mealSet, error } = await supabase.from("meal_sets").insert(body).select().single()
 
-    if (!name || !type || !price) {
-      return NextResponse.json({ error: "Missing required fields: name, type, price" }, { status: 400 })
-    }
-
-    // Insert the meal set
-    const { data: mealSet, error: mealSetError } = await supabase
-      .from("meal_sets")
-      .insert({
-        name,
-        type,
-        price: Number(price),
-        description: body.description || null,
-        comment: body.comment || null,
-        items: body.items || null,
-      })
-      .select()
-      .single()
-
-    if (mealSetError) {
-      console.error("Meal set creation error:", mealSetError)
+    if (error) {
+      console.error("Error creating meal set:", error)
       return NextResponse.json({ error: "Failed to create meal set" }, { status: 500 })
     }
 
-    return NextResponse.json(mealSet, { status: 201 })
+    return NextResponse.json(mealSet)
   } catch (error) {
-    console.error("Server error:", error)
+    console.error("Error in POST /api/meal-sets:", error)
     return NextResponse.json({ error: "Internal server error" }, { status: 500 })
   }
 }
