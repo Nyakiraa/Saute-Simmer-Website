@@ -23,6 +23,9 @@ function OrderDetailsContent() {
     address: "",
     paymentMethod: "cash",
     specialRequests: "",
+    eventType: "",
+    eventDate: "",
+    guestCount: "",
   })
   const [isSubmitting, setIsSubmitting] = useState(false)
   const [user, setUser] = useState<any>(null)
@@ -99,8 +102,12 @@ function OrderDetailsContent() {
           quantity: quantities[item.id] || 1,
         })),
         total_amount: calculateTotal(),
-        order_type: "custom",
+        order_type: customerInfo.eventType ? "catering" : "custom",
         quantity: selectedItems.reduce((sum, item) => sum + (quantities[item.id] || 1), 0),
+        event_type: customerInfo.eventType || null,
+        event_date: customerInfo.eventDate || null,
+        guest_count: customerInfo.guestCount ? Number(customerInfo.guestCount) : null,
+        contact_person: customerInfo.name,
       }
 
       const response = await fetch("/api/orders", {
@@ -360,6 +367,70 @@ function OrderDetailsContent() {
                   placeholder="Any special requests or dietary requirements"
                 />
               </div>
+
+              <div>
+                <label style={{ display: "block", fontSize: "0.875rem", fontWeight: "500", marginBottom: "0.25rem" }}>
+                  Event Type (Optional)
+                </label>
+                <input
+                  type="text"
+                  value={customerInfo.eventType}
+                  onChange={(e) => setCustomerInfo({ ...customerInfo, eventType: e.target.value })}
+                  style={{
+                    width: "100%",
+                    padding: "0.5rem",
+                    border: "1px solid #d1d5db",
+                    borderRadius: "0.25rem",
+                    fontSize: "0.875rem",
+                  }}
+                  placeholder="e.g., Birthday Party, Wedding, Corporate Event"
+                />
+              </div>
+
+              {customerInfo.eventType && (
+                <>
+                  <div>
+                    <label
+                      style={{ display: "block", fontSize: "0.875rem", fontWeight: "500", marginBottom: "0.25rem" }}
+                    >
+                      Event Date
+                    </label>
+                    <input
+                      type="date"
+                      value={customerInfo.eventDate}
+                      onChange={(e) => setCustomerInfo({ ...customerInfo, eventDate: e.target.value })}
+                      style={{
+                        width: "100%",
+                        padding: "0.5rem",
+                        border: "1px solid #d1d5db",
+                        borderRadius: "0.25rem",
+                        fontSize: "0.875rem",
+                      }}
+                    />
+                  </div>
+
+                  <div>
+                    <label
+                      style={{ display: "block", fontSize: "0.875rem", fontWeight: "500", marginBottom: "0.25rem" }}
+                    >
+                      Expected Guest Count
+                    </label>
+                    <input
+                      type="number"
+                      value={customerInfo.guestCount}
+                      onChange={(e) => setCustomerInfo({ ...customerInfo, guestCount: e.target.value })}
+                      style={{
+                        width: "100%",
+                        padding: "0.5rem",
+                        border: "1px solid #d1d5db",
+                        borderRadius: "0.25rem",
+                        fontSize: "0.875rem",
+                      }}
+                      placeholder="Number of guests"
+                    />
+                  </div>
+                </>
+              )}
 
               <button
                 type="button"
