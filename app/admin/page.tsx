@@ -1,5 +1,4 @@
 "use client"
-
 import type React from "react"
 import { useState, useEffect } from "react"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
@@ -42,7 +41,7 @@ interface MealSet {
   type: "premium" | "standard" | "basic"
   price: number
   description: string
-  items: Item[]
+  items: string
   comment?: string
 }
 
@@ -81,10 +80,19 @@ interface Order {
   id: number
   customer_id: number
   customer_name: string
-  items: Item[]
+  customer_email: string
+  meal_set_id?: number
+  meal_set_name?: string
+  meal_set_type?: string
   total_amount: number
   status: "pending" | "confirmed" | "preparing" | "delivered" | "cancelled"
   order_date: string
+  created_at: string
+  delivery_date?: string
+  delivery_time?: string
+  location?: string
+  special_requests?: string
+  guest_count?: number
 }
 
 function AdminDashboard() {
@@ -421,6 +429,41 @@ function AdminDashboard() {
       order.status?.toLowerCase().includes(searchTerm.toLowerCase()),
   )
 
+  // Helper functions for formatting
+  const formatCurrency = (amount: number) => {
+    return new Intl.NumberFormat("en-PH", {
+      style: "currency",
+      currency: "PHP",
+    }).format(amount)
+  }
+
+  const formatDate = (dateString: string) => {
+    return new Date(dateString).toLocaleDateString("en-US", {
+      year: "numeric",
+      month: "short",
+      day: "numeric",
+      hour: "2-digit",
+      minute: "2-digit",
+    })
+  }
+
+  const getStatusBadgeVariant = (status: string) => {
+    switch (status) {
+      case "pending":
+        return "secondary"
+      case "confirmed":
+        return "default"
+      case "preparing":
+        return "outline"
+      case "delivered":
+        return "default"
+      case "cancelled":
+        return "destructive"
+      default:
+        return "secondary"
+    }
+  }
+
   if (isLoading) {
     return (
       <div className="min-h-screen bg-gradient-to-br from-red-50 to-orange-50 flex items-center justify-center">
@@ -533,11 +576,7 @@ function AdminDashboard() {
                 </CardHeader>
                 <CardContent>
                   <div className="text-2xl font-bold">
-                    ₱
-                    {payments
-                      .filter((p) => p.status === "paid")
-                      .reduce((sum, p) => sum + p.amount, 0)
-                      .toLocaleString()}
+                    {formatCurrency(payments.filter((p) => p.status === "paid").reduce((sum, p) => sum + p.amount, 0))}
                   </div>
                 </CardContent>
               </Card>
@@ -549,30 +588,53 @@ function AdminDashboard() {
                 <CardTitle>Recent Orders</CardTitle>
               </CardHeader>
               <CardContent>
-                <Table>
-                  <TableHeader>
-                    <TableRow>
-                      <TableHead>Order ID</TableHead>
-                      <TableHead>Customer</TableHead>
-                      <TableHead>Amount</TableHead>
-                      <TableHead>Status</TableHead>
-                      <TableHead>Date</TableHead>
-                    </TableRow>
-                  </TableHeader>
-                  <TableBody>
-                    {orders.slice(0, 5).map((order) => (
-                      <TableRow key={order.id}>
-                        <TableCell>{order.id}</TableCell>
-                        <TableCell>{order.customer_name}</TableCell>
-                        <TableCell>₱{order.total_amount.toLocaleString()}</TableCell>
-                        <TableCell>
-                          <Badge variant={order.status === "delivered" ? "default" : "secondary"}>{order.status}</Badge>
-                        </TableCell>
-                        <TableCell>{order.order_date}</TableCell>
+                {orders.length === 0 ? (
+                  <div className="text-center py-8 text-gray-500">
+                    <p>No orders found</p>
+                    <p className="text-sm">Orders will appear here once customers start placing them</p>
+                  </div>
+                ) : (
+                  <Table>
+                    <TableHeader>
+                      <TableRow>
+                        <TableHead>Order ID</TableHead>
+                        <TableHead>Customer</TableHead>
+                        <TableHead>Meal Set</TableHead>
+                        <TableHead>Amount</TableHead>
+                        <TableHead>Status</TableHead>
+                        <TableHead>Date</TableHead>
                       </TableRow>
-                    ))}
-                  </TableBody>
-                </Table>
+                    </TableHeader>
+                    <TableBody>
+                      {orders.slice(0, 10).map((order) => (
+                        <TableRow key={order.id}>
+                          <TableCell className="font-medium">#{order.id}</TableCell>
+                          <TableCell>
+                            <div>
+                              <div className="font-medium">{order.customer_name}</div>
+                              <div className="text-sm text-gray-500">{order.customer_email}</div>
+                            </div>
+                          </TableCell>
+                          <TableCell>
+                            <div>
+                              <div className="font-medium">{order.meal_set_name || "Custom Order"}</div>
+                              {order.meal_set_type && (
+                                <div className="text-sm text-gray-500 capitalize">{order.meal_set_type}</div>
+                              )}
+                            </div>
+                          </TableCell>
+                          <TableCell className="font-medium">{formatCurrency(order.total_amount)}</TableCell>
+                          <TableCell>
+                            <Badge variant={getStatusBadgeVariant(order.status)} className="capitalize">
+                              {order.status}
+                            </Badge>
+                          </TableCell>
+                          <TableCell className="text-sm">{formatDate(order.created_at || order.order_date)}</TableCell>
+                        </TableRow>
+                      ))}
+                    </TableBody>
+                  </Table>
+                )}
               </CardContent>
             </Card>
           </TabsContent>
@@ -669,7 +731,7 @@ function AdminDashboard() {
                         <TableCell>
                           <Badge variant="outline">{item.category}</Badge>
                         </TableCell>
-                        <TableCell>₱{item.price}</TableCell>
+                        <TableCell>{formatCurrency(item.price)}</TableCell>
                         <TableCell>
                           <Badge variant={item.status === "available" ? "default" : "secondary"}>{item.status}</Badge>
                         </TableCell>
@@ -769,7 +831,7 @@ function AdminDashboard() {
                   </CardHeader>
                   <CardContent>
                     <p className="text-sm text-gray-600 mb-4">{mealSet.description}</p>
-                    <div className="text-2xl font-bold text-red-600 mb-4">₱{mealSet.price}</div>
+                    <div className="text-2xl font-bold text-red-600 mb-4">{formatCurrency(mealSet.price)}</div>
                     {mealSet.comment && <p className="text-sm text-gray-500">{mealSet.comment}</p>}
                   </CardContent>
                 </Card>
@@ -940,7 +1002,7 @@ function AdminDashboard() {
                     {filteredPayments.map((payment) => (
                       <TableRow key={payment.id}>
                         <TableCell>{payment.customer_name}</TableCell>
-                        <TableCell>₱{payment.amount.toLocaleString()}</TableCell>
+                        <TableCell>{formatCurrency(payment.amount)}</TableCell>
                         <TableCell>{payment.payment_method}</TableCell>
                         <TableCell>
                           <Badge variant={payment.status === "paid" ? "default" : "secondary"}>{payment.status}</Badge>
@@ -1171,7 +1233,7 @@ function MealSetForm({
     type: mealSet?.type || ("standard" as const),
     price: mealSet?.price || 0,
     description: mealSet?.description || "",
-    items: mealSet?.items || [],
+    items: mealSet?.items || "",
     comment: mealSet?.comment || "",
   })
 
