@@ -347,14 +347,14 @@ function AdminDashboard() {
           // If parsing fails, treat as comma-separated string
           const itemList = data
             .split(",")
-            .map((item) => item.trim())
-            .filter((item) => item.length > 0)
+            .map((item: string) => item.trim())
+            .filter((item: string) => item.length > 0)
           return itemList
         }
       }
 
       if (Array.isArray(data)) {
-        data.forEach((item) => {
+        data.forEach((item: any) => {
           if (typeof item === "string") {
             names.push(item)
           } else if (typeof item === "object" && item !== null && item.name) {
@@ -363,9 +363,9 @@ function AdminDashboard() {
         })
       } else if (typeof data === "object" && data !== null) {
         // Handle the specific structure: {"snack":[{...}],"main":[],"side":[],"beverage":[]}
-        Object.values(data).forEach((categoryItems) => {
+        Object.values(data).forEach((categoryItems: any) => {
           if (Array.isArray(categoryItems)) {
-            categoryItems.forEach((item) => {
+            categoryItems.forEach((item: any) => {
               if (typeof item === "object" && item !== null && item.name) {
                 names.push(item.name)
               } else if (typeof item === "string") {
