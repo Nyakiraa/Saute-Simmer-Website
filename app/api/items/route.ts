@@ -1,24 +1,20 @@
 import { type NextRequest, NextResponse } from "next/server"
-import { createServerClient } from "@/lib/supabase"
+import { createClient } from "@supabase/supabase-js"
+
+const supabase = createClient(process.env.NEXT_PUBLIC_SUPABASE_URL!, process.env.SUPABASE_SERVICE_ROLE_KEY!)
 
 export async function GET() {
   try {
-    const supabase = createServerClient()
-
-    const { data: items, error } = await supabase
-      .from("items")
-      .select("*")
-      .order("category", { ascending: true })
-      .order("name", { ascending: true })
+    const { data: items, error } = await supabase.from("items").select("*").order("created_at", { ascending: false })
 
     if (error) {
-      console.error("Database error:", error)
+      console.error("Error fetching items:", error)
       return NextResponse.json({ error: "Failed to fetch items" }, { status: 500 })
     }
 
-    return NextResponse.json(items || [])
+    return NextResponse.json(items)
   } catch (error) {
-    console.error("Server error:", error)
+    console.error("Error in GET /api/items:", error)
     return NextResponse.json({ error: "Internal server error" }, { status: 500 })
   }
 }
@@ -26,36 +22,17 @@ export async function GET() {
 export async function POST(request: NextRequest) {
   try {
     const body = await request.json()
-    const supabase = createServerClient()
 
-    // Validate required fields
-    const { name, category, price } = body
+    const { data: item, error } = await supabase.from("items").insert(body).select().single()
 
-    if (!name || !category || !price) {
-      return NextResponse.json({ error: "Missing required fields: name, category, price" }, { status: 400 })
-    }
-
-    // Insert the item
-    const { data: item, error: itemError } = await supabase
-      .from("items")
-      .insert({
-        name,
-        category,
-        price: Number(price),
-        description: body.description || null,
-        status: body.status || "available",
-      })
-      .select()
-      .single()
-
-    if (itemError) {
-      console.error("Item creation error:", itemError)
+    if (error) {
+      console.error("Error creating item:", error)
       return NextResponse.json({ error: "Failed to create item" }, { status: 500 })
     }
 
-    return NextResponse.json(item, { status: 201 })
+    return NextResponse.json(item)
   } catch (error) {
-    console.error("Server error:", error)
+    console.error("Error in POST /api/items:", error)
     return NextResponse.json({ error: "Internal server error" }, { status: 500 })
   }
 }
