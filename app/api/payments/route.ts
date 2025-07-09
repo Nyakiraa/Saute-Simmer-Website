@@ -40,9 +40,9 @@ export async function POST(request: NextRequest) {
       .insert({
         customer_id: body.customer_id || null,
         customer_name,
-        amount,
+        amount: Number(amount),
         transaction_id: body.transaction_id || null,
-        payment_date: body.payment_date || new Date().toISOString(),
+        payment_date: body.payment_date || new Date(),
         order_id: body.order_id || null,
         payment_method: body.payment_method || null,
         status: body.status || "pending",
