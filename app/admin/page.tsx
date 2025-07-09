@@ -16,7 +16,7 @@ import { toast } from "sonner"
 import AdminAuthWrapper from "@/components/admin-auth-wrapper"
 import { signOut } from "@/lib/supabase-auth"
 
-// Types
+// Types matching your actual database schema
 interface Customer {
   id: number
   name: string
@@ -29,20 +29,22 @@ interface Customer {
 interface Item {
   id: number
   name: string
-  category: "snack" | "main" | "side" | "beverage"
+  category: string
   price: number
   description: string
-  status: "available" | "unavailable"
+  status: string
+  created_at: string
 }
 
 interface MealSet {
   id: number
   name: string
-  type: "premium" | "standard" | "basic"
+  type: string
   price: number
   description: string
   items: string
   comment?: string
+  created_at: string
 }
 
 interface CateringService {
@@ -52,17 +54,26 @@ interface CateringService {
   event_type: string
   event_date: string
   guest_count: number
-  status: "pending" | "confirmed" | "completed" | "cancelled"
+  status: string
   location: string
   special_requests?: string
+  created_at: string
+  order_id?: number
+  location_id?: number
+  payment_method?: string
 }
 
 interface Location {
   id: number
+  name: string
   address: string
-  date_of_service: string
-  start_time: string
-  end_time: string
+  city: string
+  phone?: string
+  status: string
+  created_at: string
+  state?: string
+  zip_code?: string
+  country: string
 }
 
 interface Payment {
@@ -70,29 +81,37 @@ interface Payment {
   customer_id: number
   customer_name: string
   amount: number
-  payment_method: "cash" | "bank" | "gcash" | "credit"
-  status: "paid" | "pending" | "cancelled" | "refunded"
+  transaction_id?: string
   payment_date: string
-  notes?: string
+  created_at: string
+  order_id?: number
+  payment_method?: string
+  status: string
 }
 
 interface Order {
   id: number
-  customer_id: number
+  customer_id?: number
   customer_name: string
-  customer_email: string
-  meal_set_id?: number
-  meal_set_name?: string
-  meal_set_type?: string
+  items: any[]
   total_amount: number
-  status: "pending" | "confirmed" | "preparing" | "delivered" | "cancelled"
+  status: string
   order_date: string
   created_at: string
   delivery_date?: string
-  delivery_time?: string
-  location?: string
+  delivery_address?: string
+  special_instructions?: string
+  payment_method?: string
+  customer_email?: string
+  order_type: string
+  meal_set_id?: number
+  meal_set_name?: string
+  event_type?: string
+  event_date?: string
+  contact_person?: string
+  contact_number?: string
   special_requests?: string
-  guest_count?: number
+  quantity: number
 }
 
 function AdminDashboard() {
@@ -132,7 +151,6 @@ function AdminDashboard() {
   const handleLogout = async () => {
     try {
       await signOut()
-      // Redirect to login page instead of homepage
       window.location.href = "/login?message=logout-success"
     } catch (error) {
       console.error("Logout error:", error)
@@ -269,7 +287,7 @@ function AdminDashboard() {
   }
 
   // CRUD Operations for Items
-  const handleSaveItem = async (itemData: Omit<Item, "id">) => {
+  const handleSaveItem = async (itemData: Omit<Item, "id" | "created_at">) => {
     try {
       if (editingItem) {
         const response = await fetch(`/api/items/${editingItem.id}`, {
@@ -293,7 +311,7 @@ function AdminDashboard() {
   }
 
   // CRUD Operations for Meal Sets
-  const handleSaveMealSet = async (mealSetData: Omit<MealSet, "id">) => {
+  const handleSaveMealSet = async (mealSetData: Omit<MealSet, "id" | "created_at">) => {
     try {
       if (editingMealSet) {
         const response = await fetch(`/api/meal-sets/${editingMealSet.id}`, {
@@ -317,7 +335,7 @@ function AdminDashboard() {
   }
 
   // CRUD Operations for Catering Services
-  const handleSaveCateringService = async (cateringData: Omit<CateringService, "id">) => {
+  const handleSaveCateringService = async (cateringData: Omit<CateringService, "id" | "created_at">) => {
     try {
       if (editingCatering) {
         const response = await fetch(`/api/catering-services/${editingCatering.id}`, {
@@ -341,7 +359,7 @@ function AdminDashboard() {
   }
 
   // CRUD Operations for Locations
-  const handleSaveLocation = async (locationData: Omit<Location, "id">) => {
+  const handleSaveLocation = async (locationData: Omit<Location, "id" | "created_at">) => {
     try {
       if (editingLocation) {
         const response = await fetch(`/api/locations/${editingLocation.id}`, {
@@ -365,7 +383,7 @@ function AdminDashboard() {
   }
 
   // CRUD Operations for Payments
-  const handleSavePayment = async (paymentData: Omit<Payment, "id">) => {
+  const handleSavePayment = async (paymentData: Omit<Payment, "id" | "created_at">) => {
     try {
       if (editingPayment) {
         const response = await fetch(`/api/payments/${editingPayment.id}`, {
@@ -413,8 +431,11 @@ function AdminDashboard() {
       service.event_type?.toLowerCase().includes(searchTerm.toLowerCase()),
   )
 
-  const filteredLocations = locations.filter((location) =>
-    location.address?.toLowerCase().includes(searchTerm.toLowerCase()),
+  const filteredLocations = locations.filter(
+    (location) =>
+      location.name?.toLowerCase().includes(searchTerm.toLowerCase()) ||
+      location.address?.toLowerCase().includes(searchTerm.toLowerCase()) ||
+      location.city?.toLowerCase().includes(searchTerm.toLowerCase()),
   )
 
   const filteredPayments = payments.filter(
@@ -459,6 +480,12 @@ function AdminDashboard() {
         return "default"
       case "cancelled":
         return "destructive"
+      case "paid":
+        return "default"
+      case "active":
+        return "default"
+      case "available":
+        return "default"
       default:
         return "secondary"
     }
@@ -481,7 +508,11 @@ function AdminDashboard() {
         {/* Header */}
         <div className="mb-8 flex items-center justify-between">
           <div className="flex items-center gap-4">
-            <img src="/images/redlogo.png" alt="Saute and Simmer Logo" className="h-12 w-auto object-contain" />
+            <img
+              src="/placeholder.svg?height=48&width=48"
+              alt="Saute and Simmer Logo"
+              className="h-12 w-auto object-contain"
+            />
             <div>
               <h1 className="text-4xl font-bold text-red-800 mb-2">Admin Dashboard</h1>
               <p className="text-gray-600">Comprehensive catering management system</p>
@@ -599,7 +630,7 @@ function AdminDashboard() {
                       <TableRow>
                         <TableHead>Order ID</TableHead>
                         <TableHead>Customer</TableHead>
-                        <TableHead>Meal Set</TableHead>
+                        <TableHead>Type</TableHead>
                         <TableHead>Amount</TableHead>
                         <TableHead>Status</TableHead>
                         <TableHead>Date</TableHead>
@@ -617,10 +648,8 @@ function AdminDashboard() {
                           </TableCell>
                           <TableCell>
                             <div>
-                              <div className="font-medium">{order.meal_set_name || "Custom Order"}</div>
-                              {order.meal_set_type && (
-                                <div className="text-sm text-gray-500 capitalize">{order.meal_set_type}</div>
-                              )}
+                              <div className="font-medium">{order.meal_set_name || order.order_type}</div>
+                              <div className="text-sm text-gray-500">Qty: {order.quantity}</div>
                             </div>
                           </TableCell>
                           <TableCell className="font-medium">{formatCurrency(order.total_amount)}</TableCell>
@@ -629,7 +658,7 @@ function AdminDashboard() {
                               {order.status}
                             </Badge>
                           </TableCell>
-                          <TableCell className="text-sm">{formatDate(order.created_at || order.order_date)}</TableCell>
+                          <TableCell className="text-sm">{formatDate(order.created_at)}</TableCell>
                         </TableRow>
                       ))}
                     </TableBody>
@@ -653,6 +682,7 @@ function AdminDashboard() {
                       <TableHead>Email</TableHead>
                       <TableHead>Phone</TableHead>
                       <TableHead>Address</TableHead>
+                      <TableHead>Joined</TableHead>
                       <TableHead>Actions</TableHead>
                     </TableRow>
                   </TableHeader>
@@ -663,6 +693,7 @@ function AdminDashboard() {
                         <TableCell>{customer.email}</TableCell>
                         <TableCell>{customer.phone}</TableCell>
                         <TableCell>{customer.address}</TableCell>
+                        <TableCell>{formatDate(customer.created_at)}</TableCell>
                         <TableCell>
                           <Dialog
                             open={isCustomerModalOpen && editingCustomer?.id === customer.id}
@@ -733,7 +764,7 @@ function AdminDashboard() {
                         </TableCell>
                         <TableCell>{formatCurrency(item.price)}</TableCell>
                         <TableCell>
-                          <Badge variant={item.status === "available" ? "default" : "secondary"}>{item.status}</Badge>
+                          <Badge variant={getStatusBadgeVariant(item.status)}>{item.status}</Badge>
                         </TableCell>
                         <TableCell>{item.description}</TableCell>
                         <TableCell>
@@ -854,6 +885,7 @@ function AdminDashboard() {
                       <TableHead>Date</TableHead>
                       <TableHead>Guests</TableHead>
                       <TableHead>Status</TableHead>
+                      <TableHead>Location</TableHead>
                       <TableHead>Actions</TableHead>
                     </TableRow>
                   </TableHeader>
@@ -865,10 +897,9 @@ function AdminDashboard() {
                         <TableCell>{service.event_date}</TableCell>
                         <TableCell>{service.guest_count}</TableCell>
                         <TableCell>
-                          <Badge variant={service.status === "confirmed" ? "default" : "secondary"}>
-                            {service.status}
-                          </Badge>
+                          <Badge variant={getStatusBadgeVariant(service.status)}>{service.status}</Badge>
                         </TableCell>
+                        <TableCell>{service.location}</TableCell>
                         <TableCell>
                           <Dialog
                             open={isCateringModalOpen && editingCatering?.id === service.id}
@@ -923,20 +954,24 @@ function AdminDashboard() {
                 <Table>
                   <TableHeader>
                     <TableRow>
+                      <TableHead>Name</TableHead>
                       <TableHead>Address</TableHead>
-                      <TableHead>Service Date</TableHead>
-                      <TableHead>Start Time</TableHead>
-                      <TableHead>End Time</TableHead>
+                      <TableHead>City</TableHead>
+                      <TableHead>Phone</TableHead>
+                      <TableHead>Status</TableHead>
                       <TableHead>Actions</TableHead>
                     </TableRow>
                   </TableHeader>
                   <TableBody>
                     {filteredLocations.map((location) => (
                       <TableRow key={location.id}>
+                        <TableCell>{location.name}</TableCell>
                         <TableCell>{location.address}</TableCell>
-                        <TableCell>{location.date_of_service}</TableCell>
-                        <TableCell>{location.start_time}</TableCell>
-                        <TableCell>{location.end_time}</TableCell>
+                        <TableCell>{location.city}</TableCell>
+                        <TableCell>{location.phone}</TableCell>
+                        <TableCell>
+                          <Badge variant={getStatusBadgeVariant(location.status)}>{location.status}</Badge>
+                        </TableCell>
                         <TableCell>
                           <Dialog
                             open={isLocationModalOpen && editingLocation?.id === location.id}
@@ -995,6 +1030,7 @@ function AdminDashboard() {
                       <TableHead>Method</TableHead>
                       <TableHead>Status</TableHead>
                       <TableHead>Date</TableHead>
+                      <TableHead>Transaction ID</TableHead>
                       <TableHead>Actions</TableHead>
                     </TableRow>
                   </TableHeader>
@@ -1005,9 +1041,10 @@ function AdminDashboard() {
                         <TableCell>{formatCurrency(payment.amount)}</TableCell>
                         <TableCell>{payment.payment_method}</TableCell>
                         <TableCell>
-                          <Badge variant={payment.status === "paid" ? "default" : "secondary"}>{payment.status}</Badge>
+                          <Badge variant={getStatusBadgeVariant(payment.status)}>{payment.status}</Badge>
                         </TableCell>
-                        <TableCell>{payment.payment_date}</TableCell>
+                        <TableCell>{formatDate(payment.payment_date)}</TableCell>
+                        <TableCell>{payment.transaction_id}</TableCell>
                         <TableCell>
                           <Dialog
                             open={isPaymentModalOpen && editingPayment?.id === payment.id}
@@ -1135,15 +1172,15 @@ function ItemForm({
   onCancel,
 }: {
   item: Item | null
-  onSave: (data: Omit<Item, "id">) => void
+  onSave: (data: Omit<Item, "id" | "created_at">) => void
   onCancel: () => void
 }) {
   const [formData, setFormData] = useState({
     name: item?.name || "",
-    category: item?.category || ("snack" as const),
+    category: item?.category || "snack",
     price: item?.price || 0,
     description: item?.description || "",
-    status: item?.status || ("available" as const),
+    status: item?.status || "available",
   })
 
   const handleSubmit = (e: React.FormEvent) => {
@@ -1164,7 +1201,7 @@ function ItemForm({
       </div>
       <div>
         <Label htmlFor="category">Category</Label>
-        <Select value={formData.category} onValueChange={(value: any) => setFormData({ ...formData, category: value })}>
+        <Select value={formData.category} onValueChange={(value) => setFormData({ ...formData, category: value })}>
           <SelectTrigger>
             <SelectValue />
           </SelectTrigger>
@@ -1188,7 +1225,7 @@ function ItemForm({
       </div>
       <div>
         <Label htmlFor="status">Status</Label>
-        <Select value={formData.status} onValueChange={(value: any) => setFormData({ ...formData, status: value })}>
+        <Select value={formData.status} onValueChange={(value) => setFormData({ ...formData, status: value })}>
           <SelectTrigger>
             <SelectValue />
           </SelectTrigger>
@@ -1225,12 +1262,12 @@ function MealSetForm({
 }: {
   mealSet: MealSet | null
   items: Item[]
-  onSave: (data: Omit<MealSet, "id">) => void
+  onSave: (data: Omit<MealSet, "id" | "created_at">) => void
   onCancel: () => void
 }) {
   const [formData, setFormData] = useState({
     name: mealSet?.name || "",
-    type: mealSet?.type || ("standard" as const),
+    type: mealSet?.type || "standard",
     price: mealSet?.price || 0,
     description: mealSet?.description || "",
     items: mealSet?.items || "",
@@ -1255,7 +1292,7 @@ function MealSetForm({
       </div>
       <div>
         <Label htmlFor="type">Type</Label>
-        <Select value={formData.type} onValueChange={(value: any) => setFormData({ ...formData, type: value })}>
+        <Select value={formData.type} onValueChange={(value) => setFormData({ ...formData, type: value })}>
           <SelectTrigger>
             <SelectValue />
           </SelectTrigger>
@@ -1285,6 +1322,15 @@ function MealSetForm({
         />
       </div>
       <div>
+        <Label htmlFor="items">Items (comma-separated)</Label>
+        <Textarea
+          id="items"
+          value={formData.items}
+          onChange={(e) => setFormData({ ...formData, items: e.target.value })}
+          placeholder="e.g., Grilled Chicken, Rice, Vegetables"
+        />
+      </div>
+      <div>
         <Label htmlFor="comment">Additional Notes</Label>
         <Textarea
           id="comment"
@@ -1310,7 +1356,7 @@ function CateringServiceForm({
 }: {
   service: CateringService | null
   customers: Customer[]
-  onSave: (data: Omit<CateringService, "id">) => void
+  onSave: (data: Omit<CateringService, "id" | "created_at">) => void
   onCancel: () => void
 }) {
   const [formData, setFormData] = useState({
@@ -1319,9 +1365,12 @@ function CateringServiceForm({
     event_type: service?.event_type || "",
     event_date: service?.event_date || "",
     guest_count: service?.guest_count || 0,
-    status: service?.status || ("pending" as const),
+    status: service?.status || "pending",
     location: service?.location || "",
     special_requests: service?.special_requests || "",
+    order_id: service?.order_id || undefined,
+    location_id: service?.location_id || undefined,
+    payment_method: service?.payment_method || "",
   })
 
   const handleCustomerChange = (customerId: string) => {
@@ -1386,7 +1435,7 @@ function CateringServiceForm({
       </div>
       <div>
         <Label htmlFor="status">Status</Label>
-        <Select value={formData.status} onValueChange={(value: any) => setFormData({ ...formData, status: value })}>
+        <Select value={formData.status} onValueChange={(value) => setFormData({ ...formData, status: value })}>
           <SelectTrigger>
             <SelectValue />
           </SelectTrigger>
@@ -1405,6 +1454,14 @@ function CateringServiceForm({
           value={formData.location}
           onChange={(e) => setFormData({ ...formData, location: e.target.value })}
           required
+        />
+      </div>
+      <div>
+        <Label htmlFor="paymentMethod">Payment Method</Label>
+        <Input
+          id="paymentMethod"
+          value={formData.payment_method}
+          onChange={(e) => setFormData({ ...formData, payment_method: e.target.value })}
         />
       </div>
       <div>
@@ -1431,14 +1488,18 @@ function LocationForm({
   onCancel,
 }: {
   location: Location | null
-  onSave: (data: Omit<Location, "id">) => void
+  onSave: (data: Omit<Location, "id" | "created_at">) => void
   onCancel: () => void
 }) {
   const [formData, setFormData] = useState({
+    name: location?.name || "",
     address: location?.address || "",
-    date_of_service: location?.date_of_service || "",
-    start_time: location?.start_time || "",
-    end_time: location?.end_time || "",
+    city: location?.city || "",
+    phone: location?.phone || "",
+    status: location?.status || "active",
+    state: location?.state || "",
+    zip_code: location?.zip_code || "",
+    country: location?.country || "Philippines",
   })
 
   const handleSubmit = (e: React.FormEvent) => {
@@ -1449,6 +1510,15 @@ function LocationForm({
   return (
     <form onSubmit={handleSubmit} className="space-y-4">
       <div>
+        <Label htmlFor="name">Location Name</Label>
+        <Input
+          id="name"
+          value={formData.name}
+          onChange={(e) => setFormData({ ...formData, name: e.target.value })}
+          required
+        />
+      </div>
+      <div>
         <Label htmlFor="address">Address</Label>
         <Textarea
           id="address"
@@ -1458,32 +1528,56 @@ function LocationForm({
         />
       </div>
       <div>
-        <Label htmlFor="dateOfService">Date of Service</Label>
+        <Label htmlFor="city">City</Label>
         <Input
-          id="dateOfService"
-          type="date"
-          value={formData.date_of_service}
-          onChange={(e) => setFormData({ ...formData, date_of_service: e.target.value })}
+          id="city"
+          value={formData.city}
+          onChange={(e) => setFormData({ ...formData, city: e.target.value })}
           required
         />
       </div>
       <div>
-        <Label htmlFor="startTime">Start Time</Label>
+        <Label htmlFor="state">State/Province</Label>
         <Input
-          id="startTime"
-          type="time"
-          value={formData.start_time}
-          onChange={(e) => setFormData({ ...formData, start_time: e.target.value })}
-          required
+          id="state"
+          value={formData.state}
+          onChange={(e) => setFormData({ ...formData, state: e.target.value })}
         />
       </div>
       <div>
-        <Label htmlFor="endTime">End Time</Label>
+        <Label htmlFor="zipCode">ZIP Code</Label>
         <Input
-          id="endTime"
-          type="time"
-          value={formData.end_time}
-          onChange={(e) => setFormData({ ...formData, end_time: e.target.value })}
+          id="zipCode"
+          value={formData.zip_code}
+          onChange={(e) => setFormData({ ...formData, zip_code: e.target.value })}
+        />
+      </div>
+      <div>
+        <Label htmlFor="phone">Phone</Label>
+        <Input
+          id="phone"
+          value={formData.phone}
+          onChange={(e) => setFormData({ ...formData, phone: e.target.value })}
+        />
+      </div>
+      <div>
+        <Label htmlFor="status">Status</Label>
+        <Select value={formData.status} onValueChange={(value) => setFormData({ ...formData, status: value })}>
+          <SelectTrigger>
+            <SelectValue />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="active">Active</SelectItem>
+            <SelectItem value="inactive">Inactive</SelectItem>
+          </SelectContent>
+        </Select>
+      </div>
+      <div>
+        <Label htmlFor="country">Country</Label>
+        <Input
+          id="country"
+          value={formData.country}
+          onChange={(e) => setFormData({ ...formData, country: e.target.value })}
           required
         />
       </div>
@@ -1505,17 +1599,18 @@ function PaymentForm({
 }: {
   payment: Payment | null
   customers: Customer[]
-  onSave: (data: Omit<Payment, "id">) => void
+  onSave: (data: Omit<Payment, "id" | "created_at">) => void
   onCancel: () => void
 }) {
   const [formData, setFormData] = useState({
     customer_id: payment?.customer_id || 0,
     customer_name: payment?.customer_name || "",
     amount: payment?.amount || 0,
-    payment_method: payment?.payment_method || ("cash" as const),
-    status: payment?.status || ("pending" as const),
-    payment_date: payment?.payment_date || "",
-    notes: payment?.notes || "",
+    transaction_id: payment?.transaction_id || "",
+    payment_date: payment?.payment_date || new Date().toISOString().split("T")[0],
+    order_id: payment?.order_id || undefined,
+    payment_method: payment?.payment_method || "",
+    status: payment?.status || "pending",
   })
 
   const handleCustomerChange = (customerId: string) => {
@@ -1563,7 +1658,7 @@ function PaymentForm({
         <Label htmlFor="paymentMethod">Payment Method</Label>
         <Select
           value={formData.payment_method}
-          onValueChange={(value: any) => setFormData({ ...formData, payment_method: value })}
+          onValueChange={(value) => setFormData({ ...formData, payment_method: value })}
         >
           <SelectTrigger>
             <SelectValue />
@@ -1578,7 +1673,7 @@ function PaymentForm({
       </div>
       <div>
         <Label htmlFor="status">Status</Label>
-        <Select value={formData.status} onValueChange={(value: any) => setFormData({ ...formData, status: value })}>
+        <Select value={formData.status} onValueChange={(value) => setFormData({ ...formData, status: value })}>
           <SelectTrigger>
             <SelectValue />
           </SelectTrigger>
@@ -1591,6 +1686,14 @@ function PaymentForm({
         </Select>
       </div>
       <div>
+        <Label htmlFor="transactionId">Transaction ID</Label>
+        <Input
+          id="transactionId"
+          value={formData.transaction_id}
+          onChange={(e) => setFormData({ ...formData, transaction_id: e.target.value })}
+        />
+      </div>
+      <div>
         <Label htmlFor="paymentDate">Payment Date</Label>
         <Input
           id="paymentDate"
@@ -1598,14 +1701,6 @@ function PaymentForm({
           value={formData.payment_date}
           onChange={(e) => setFormData({ ...formData, payment_date: e.target.value })}
           required
-        />
-      </div>
-      <div>
-        <Label htmlFor="notes">Notes</Label>
-        <Textarea
-          id="notes"
-          value={formData.notes}
-          onChange={(e) => setFormData({ ...formData, notes: e.target.value })}
         />
       </div>
       <DialogFooter>
