@@ -281,6 +281,9 @@ function AdminDashboard() {
 
   // View order items function
   const handleViewOrderItems = async (order: Order) => {
+    console.log("Viewing order:", order) // Debug log
+    console.log("Order items:", order.items) // Debug log
+
     if (order.meal_set_id) {
       const mealSet = mealSets.find((ms) => ms.id === order.meal_set_id)
       setViewingOrderItems({ order, mealSet: mealSet || null })
@@ -332,58 +335,107 @@ function AdminDashboard() {
     return <span className="text-gray-500">No items data</span>
   }
 
-  // Render actual order items function - simplified to show only names
+  // Enhanced render order items function with better debugging and handling
   const renderOrderItems = (items: any) => {
-    if (!items) return <span className="text-gray-500">No items selected</span>
+    console.log("renderOrderItems called with:", items) // Debug log
+    console.log("Type of items:", typeof items) // Debug log
+
+    if (!items) {
+      console.log("Items is null/undefined")
+      return <span className="text-gray-500">No items selected</span>
+    }
 
     const extractItemNames = (data: any): string[] => {
+      console.log("extractItemNames called with:", data) // Debug log
       const names: string[] = []
+
+      // Handle null or undefined
+      if (!data) {
+        console.log("Data is null/undefined")
+        return names
+      }
 
       // If data is a string, try to parse it as JSON first
       if (typeof data === "string") {
+        console.log("Data is string:", data)
+
+        // Handle empty string
+        if (data.trim() === "") {
+          console.log("Empty string")
+          return names
+        }
+
         try {
-          data = JSON.parse(data)
+          const parsed = JSON.parse(data)
+          console.log("Parsed JSON:", parsed)
+          return extractItemNames(parsed) // Recursive call with parsed data
         } catch (e) {
+          console.log("Failed to parse JSON, treating as comma-separated string")
           // If parsing fails, treat as comma-separated string
           const itemList = data
             .split(",")
             .map((item: string) => item.trim())
             .filter((item: string) => item.length > 0)
+          console.log("Comma-separated items:", itemList)
           return itemList
         }
       }
 
+      // Handle arrays
       if (Array.isArray(data)) {
-        data.forEach((item: any) => {
+        console.log("Data is array:", data)
+        data.forEach((item: any, index: number) => {
+          console.log(`Array item ${index}:`, item)
           if (typeof item === "string") {
             names.push(item)
           } else if (typeof item === "object" && item !== null && item.name) {
             names.push(item.name)
           }
         })
-      } else if (typeof data === "object" && data !== null) {
+      }
+      // Handle objects (including the complex categorized format)
+      else if (typeof data === "object" && data !== null) {
+        console.log("Data is object:", data)
+
         // Handle the specific structure: {"snack":[{...}],"main":[],"side":[],"beverage":[]}
-        // This handles both simple arrays and complex objects with full item details
         Object.entries(data).forEach(([category, categoryItems]: [string, any]) => {
+          console.log(`Category ${category}:`, categoryItems)
+
           if (Array.isArray(categoryItems)) {
-            categoryItems.forEach((item: any) => {
+            categoryItems.forEach((item: any, index: number) => {
+              console.log(`${category} item ${index}:`, item)
               if (typeof item === "object" && item !== null && item.name) {
                 names.push(item.name)
               } else if (typeof item === "string") {
                 names.push(item)
               }
             })
+          } else if (typeof categoryItems === "string") {
+            // Handle case where category contains a string
+            names.push(categoryItems)
           }
         })
       }
 
+      console.log("Extracted names:", names)
       return names
     }
 
     const itemNames = extractItemNames(items)
 
     if (itemNames.length === 0) {
-      return <span className="text-gray-500">No items selected</span>
+      console.log("No item names extracted")
+      return (
+        <div className="space-y-2">
+          <span className="text-gray-500">No items selected</span>
+          <div className="text-xs text-gray-400 mt-2">
+            <strong>Debug info:</strong>
+            <pre className="bg-gray-100 p-2 rounded text-xs overflow-auto max-h-32">
+              {JSON.stringify(items, null, 2)}
+            </pre>
+          </div>
+        </div>
+      )
     }
 
     return (
@@ -1368,11 +1420,7 @@ function AdminDashboard() {
                 {/* Selected Items */}
                 <div className="bg-purple-50 p-4 rounded-lg">
                   <h4 className="font-semibold mb-3 text-purple-800">Selected Items</h4>
-                  {viewingOrderItems.order.items && viewingOrderItems.order.items.length > 0 ? (
-                    renderOrderItems(viewingOrderItems.order.items)
-                  ) : (
-                    <p className="text-gray-500">No individual items selected</p>
-                  )}
+                  {renderOrderItems(viewingOrderItems.order.items)}
                 </div>
 
                 {/* Meal Set Information */}
