@@ -1,20 +1,20 @@
 import { type NextRequest, NextResponse } from "next/server"
-import { createServerClient } from "@/lib/supabase"
+import { createClient } from "@supabase/supabase-js"
+
+const supabase = createClient(process.env.NEXT_PUBLIC_SUPABASE_URL!, process.env.SUPABASE_SERVICE_ROLE_KEY!)
 
 export async function GET() {
   try {
-    const supabase = createServerClient()
-
     const { data: locations, error } = await supabase.from("locations").select("*").order("name", { ascending: true })
 
     if (error) {
-      console.error("Database error:", error)
+      console.error("Error fetching locations:", error)
       return NextResponse.json({ error: "Failed to fetch locations" }, { status: 500 })
     }
 
-    return NextResponse.json(locations || [])
+    return NextResponse.json(locations)
   } catch (error) {
-    console.error("Server error:", error)
+    console.error("Error in GET /api/locations:", error)
     return NextResponse.json({ error: "Internal server error" }, { status: 500 })
   }
 }
@@ -22,39 +22,32 @@ export async function GET() {
 export async function POST(request: NextRequest) {
   try {
     const body = await request.json()
-    const supabase = createServerClient()
 
     // Validate required fields
-    const { name, address, city } = body
-
-    if (!name || !address || !city) {
-      return NextResponse.json({ error: "Missing required fields: name, address, city" }, { status: 400 })
+    if (!body.name || !body.address) {
+      return NextResponse.json({ error: "Missing required fields: name, address" }, { status: 400 })
     }
 
-    // Insert the location
-    const { data: location, error: locationError } = await supabase
-      .from("locations")
-      .insert({
-        name,
-        address,
-        city,
-        phone: body.phone || null,
-        status: body.status || "active",
-        state: body.state || null,
-        zip_code: body.zip_code || null,
-        country: body.country || "Philippines",
-      })
-      .select()
-      .single()
+    const locationData = {
+      name: body.name,
+      address: body.address,
+      phone: body.phone || null,
+      status: body.status || "active",
+      state: body.state || null,
+      zip_code: body.zip_code || null,
+      country: body.country || "Philippines",
+    }
 
-    if (locationError) {
-      console.error("Location creation error:", locationError)
+    const { data: location, error } = await supabase.from("locations").insert(locationData).select().single()
+
+    if (error) {
+      console.error("Error creating location:", error)
       return NextResponse.json({ error: "Failed to create location" }, { status: 500 })
     }
 
-    return NextResponse.json(location, { status: 201 })
+    return NextResponse.json(location)
   } catch (error) {
-    console.error("Server error:", error)
+    console.error("Error in POST /api/locations:", error)
     return NextResponse.json({ error: "Internal server error" }, { status: 500 })
   }
 }
