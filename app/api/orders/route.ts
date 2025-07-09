@@ -62,6 +62,26 @@ export async function POST(request: NextRequest) {
       }
     }
 
+    // Handle location creation/lookup if delivery address is provided
+    let locationId = null
+    if (body.delivery_address) {
+      // Try to find existing location or create new one
+      const { data: newLocation, error: locationError } = await supabase
+        .from("locations")
+        .insert({
+          name: `${body.customer_name}'s Location`,
+          address: body.delivery_address,
+          status: "active",
+          country: "Philippines",
+        })
+        .select("id")
+        .single()
+
+      if (!locationError) {
+        locationId = newLocation.id
+      }
+    }
+
     // Create order
     const orderData = {
       customer_id: customerId,
@@ -79,6 +99,9 @@ export async function POST(request: NextRequest) {
       quantity: Number(body.quantity) || 1,
       status: "pending",
       order_date: new Date().toISOString(),
+      event_type: body.event_type || null,
+      event_date: body.event_date || null,
+      contact_person: body.contact_person || body.customer_name,
     }
 
     const { data: order, error: orderError } = await supabase.from("orders").insert(orderData).select().single()
@@ -86,6 +109,29 @@ export async function POST(request: NextRequest) {
     if (orderError) {
       console.error("Error creating order:", orderError)
       return NextResponse.json({ error: "Failed to create order" }, { status: 500 })
+    }
+
+    // Create catering service record if this is a catering order
+    if (body.order_type === "catering" || body.event_type) {
+      const cateringData = {
+        customer_id: customerId,
+        customer_name: body.customer_name,
+        event_type: body.event_type || "catering",
+        event_date: body.event_date || new Date().toISOString().split("T")[0],
+        guest_count: Number(body.guest_count) || Number(body.quantity) || 1,
+        status: "pending",
+        location: body.delivery_address || "To be determined",
+        special_requests: body.special_requests || "",
+        order_id: order.id,
+        location_id: locationId,
+        payment_method: body.payment_method,
+      }
+
+      const { error: cateringError } = await supabase.from("catering_services").insert(cateringData)
+
+      if (cateringError) {
+        console.error("Error creating catering service:", cateringError)
+      }
     }
 
     // Create payment record
