@@ -1,7 +1,6 @@
 "use client"
 
 import type React from "react"
-
 import { useState, useEffect } from "react"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
@@ -9,21 +8,22 @@ import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Textarea } from "@/components/ui/textarea"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
+import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog"
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
 import { Badge } from "@/components/ui/badge"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
-import { Users, Package, ShoppingCart, DollarSign, Plus, Edit, Trash2, MapPin } from "lucide-react"
+import { Edit, Search, Users, Package, Utensils, MapPin, CreditCard, ShoppingCart, Layers, LogOut } from "lucide-react"
+import { toast } from "sonner"
+import AdminAuthWrapper from "@/components/admin-auth-wrapper"
+import { signOut } from "@/lib/supabase-auth"
 
-// Simple notification function to replace toast
-const showNotification = (message: string, type: "success" | "error" = "success") => {
-  alert(`${type.toUpperCase()}: ${message}`)
-}
-
+// Types matching your actual database schema
 interface Customer {
   id: number
   name: string
   email: string
-  phone?: string
+  phone: string
+  address: string
   created_at: string
 }
 
@@ -32,7 +32,8 @@ interface Item {
   name: string
   category: string
   price: number
-  description?: string
+  description: string
+  status: string
   created_at: string
 }
 
@@ -41,79 +42,144 @@ interface MealSet {
   name: string
   type: string
   price: number
-  description?: string
+  description: string
+  items: string
+  comment?: string
   created_at: string
 }
 
-interface Order {
+interface CateringService {
   id: number
+  customer_id: number
   customer_name: string
-  customer_email?: string
-  total_amount: number
+  event_type: string
+  event_date: string
+  guest_count: number
   status: string
-  order_type: string
-  meal_set_name?: string
-  quantity: number
-  order_date: string
+  location: string
+  special_requests?: string
   created_at: string
+  order_id?: number
+  location_id?: number
+  payment_method?: string
 }
 
 interface Location {
   id: number
   name: string
   address: string
+  city: string
+  phone?: string
+  status: string
   created_at: string
+  state?: string
+  zip_code?: string
+  country: string
 }
 
 interface Payment {
   id: number
-  order_id: number
+  customer_id: number
+  customer_name: string
   amount: number
-  payment_method: string
-  status: string
+  transaction_id?: string
+  payment_date: string
   created_at: string
+  order_id?: number
+  payment_method?: string
+  status: string
 }
 
-export default function AdminDashboard() {
+interface Order {
+  id: number
+  customer_id?: number
+  customer_name: string
+  items: any[]
+  total_amount: number
+  status: string
+  order_date: string
+  created_at: string
+  delivery_date?: string
+  delivery_address?: string
+  special_instructions?: string
+  payment_method?: string
+  customer_email?: string
+  order_type: string
+  meal_set_id?: number
+  meal_set_name?: string
+  event_type?: string
+  event_date?: string
+  contact_person?: string
+  contact_number?: string
+  special_requests?: string
+  quantity: number
+}
+
+function AdminDashboard() {
+  // State management
+  const [activeTab, setActiveTab] = useState("overview")
   const [customers, setCustomers] = useState<Customer[]>([])
   const [items, setItems] = useState<Item[]>([])
   const [mealSets, setMealSets] = useState<MealSet[]>([])
-  const [orders, setOrders] = useState<Order[]>([])
+  const [cateringServices, setCateringServices] = useState<CateringService[]>([])
   const [locations, setLocations] = useState<Location[]>([])
   const [payments, setPayments] = useState<Payment[]>([])
-  const [loading, setLoading] = useState(true)
+  const [orders, setOrders] = useState<Order[]>([])
+  const [searchTerm, setSearchTerm] = useState("")
+  const [isLoading, setIsLoading] = useState(false)
+
+  // Modal states
+  const [isCustomerModalOpen, setIsCustomerModalOpen] = useState(false)
+  const [isItemModalOpen, setIsItemModalOpen] = useState(false)
+  const [isMealSetModalOpen, setIsMealSetModalOpen] = useState(false)
+  const [isCateringModalOpen, setIsCateringModalOpen] = useState(false)
+  const [isLocationModalOpen, setIsLocationModalOpen] = useState(false)
+  const [isPaymentModalOpen, setIsPaymentModalOpen] = useState(false)
 
   // Form states
-  const [newCustomer, setNewCustomer] = useState({ name: "", email: "", phone: "" })
-  const [newItem, setNewItem] = useState({ name: "", category: "", price: 0, description: "" })
-  const [newMealSet, setNewMealSet] = useState({ name: "", type: "", price: 0, description: "" })
-  const [newLocation, setNewLocation] = useState({ name: "", address: "" })
+  const [editingCustomer, setEditingCustomer] = useState<Customer | null>(null)
   const [editingItem, setEditingItem] = useState<Item | null>(null)
+  const [editingMealSet, setEditingMealSet] = useState<MealSet | null>(null)
+  const [editingCatering, setEditingCatering] = useState<CateringService | null>(null)
+  const [editingLocation, setEditingLocation] = useState<Location | null>(null)
+  const [editingPayment, setEditingPayment] = useState<Payment | null>(null)
 
+  // Load data on component mount
   useEffect(() => {
-    fetchAllData()
+    loadAllData()
   }, [])
 
-  const fetchAllData = async () => {
+  const handleLogout = async () => {
     try {
-      setLoading(true)
-      await Promise.all([
-        fetchCustomers(),
-        fetchItems(),
-        fetchMealSets(),
-        fetchOrders(),
-        fetchLocations(),
-        fetchPayments(),
-      ])
+      await signOut()
+      window.location.href = "/login?message=logout-success"
     } catch (error) {
-      console.error("Error fetching data:", error)
-      showNotification("Error loading dashboard data", "error")
-    } finally {
-      setLoading(false)
+      console.error("Logout error:", error)
+      toast.error("Failed to logout")
     }
   }
 
-  const fetchCustomers = async () => {
+  const loadAllData = async () => {
+    setIsLoading(true)
+    try {
+      await Promise.all([
+        loadCustomers(),
+        loadItems(),
+        loadMealSets(),
+        loadCateringServices(),
+        loadLocations(),
+        loadPayments(),
+        loadOrders(),
+      ])
+    } catch (error) {
+      console.error("Error loading data:", error)
+      toast.error("Failed to load data")
+    } finally {
+      setIsLoading(false)
+    }
+  }
+
+  const loadCustomers = async () => {
     try {
       const response = await fetch("/api/customers")
       if (response.ok) {
@@ -121,11 +187,11 @@ export default function AdminDashboard() {
         setCustomers(data)
       }
     } catch (error) {
-      console.error("Error fetching customers:", error)
+      console.error("Error loading customers:", error)
     }
   }
 
-  const fetchItems = async () => {
+  const loadItems = async () => {
     try {
       const response = await fetch("/api/items")
       if (response.ok) {
@@ -133,11 +199,11 @@ export default function AdminDashboard() {
         setItems(data)
       }
     } catch (error) {
-      console.error("Error fetching items:", error)
+      console.error("Error loading items:", error)
     }
   }
 
-  const fetchMealSets = async () => {
+  const loadMealSets = async () => {
     try {
       const response = await fetch("/api/meal-sets")
       if (response.ok) {
@@ -145,23 +211,23 @@ export default function AdminDashboard() {
         setMealSets(data)
       }
     } catch (error) {
-      console.error("Error fetching meal sets:", error)
+      console.error("Error loading meal sets:", error)
     }
   }
 
-  const fetchOrders = async () => {
+  const loadCateringServices = async () => {
     try {
-      const response = await fetch("/api/orders")
+      const response = await fetch("/api/catering-services")
       if (response.ok) {
         const data = await response.json()
-        setOrders(data)
+        setCateringServices(data)
       }
     } catch (error) {
-      console.error("Error fetching orders:", error)
+      console.error("Error loading catering services:", error)
     }
   }
 
-  const fetchLocations = async () => {
+  const loadLocations = async () => {
     try {
       const response = await fetch("/api/locations")
       if (response.ok) {
@@ -169,11 +235,11 @@ export default function AdminDashboard() {
         setLocations(data)
       }
     } catch (error) {
-      console.error("Error fetching locations:", error)
+      console.error("Error loading locations:", error)
     }
   }
 
-  const fetchPayments = async () => {
+  const loadPayments = async () => {
     try {
       const response = await fetch("/api/payments")
       if (response.ok) {
@@ -181,132 +247,211 @@ export default function AdminDashboard() {
         setPayments(data)
       }
     } catch (error) {
-      console.error("Error fetching payments:", error)
+      console.error("Error loading payments:", error)
     }
   }
 
-  const handleCreateCustomer = async (e: React.FormEvent) => {
-    e.preventDefault()
+  const loadOrders = async () => {
     try {
-      const response = await fetch("/api/customers", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(newCustomer),
-      })
-
+      const response = await fetch("/api/orders")
       if (response.ok) {
-        showNotification("Customer created successfully")
-        setNewCustomer({ name: "", email: "", phone: "" })
-        fetchCustomers()
-      } else {
-        throw new Error("Failed to create customer")
+        const data = await response.json()
+        setOrders(data)
       }
     } catch (error) {
-      showNotification("Error creating customer", "error")
+      console.error("Error loading orders:", error)
     }
   }
 
-  const handleCreateItem = async (e: React.FormEvent) => {
-    e.preventDefault()
+  // CRUD Operations for Customers
+  const handleSaveCustomer = async (customerData: Omit<Customer, "id" | "created_at">) => {
     try {
-      const response = await fetch("/api/items", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(newItem),
-      })
-
-      if (response.ok) {
-        showNotification("Item created successfully")
-        setNewItem({ name: "", category: "", price: 0, description: "" })
-        fetchItems()
-      } else {
-        throw new Error("Failed to create item")
+      if (editingCustomer) {
+        const response = await fetch(`/api/customers/${editingCustomer.id}`, {
+          method: "PUT",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(customerData),
+        })
+        if (response.ok) {
+          toast.success("Customer updated successfully")
+          await loadCustomers()
+        } else {
+          throw new Error("Failed to update customer")
+        }
       }
     } catch (error) {
-      showNotification("Error creating item", "error")
+      console.error("Error saving customer:", error)
+      toast.error("Failed to save customer")
     }
+    setIsCustomerModalOpen(false)
+    setEditingCustomer(null)
   }
 
-  const handleCreateMealSet = async (e: React.FormEvent) => {
-    e.preventDefault()
+  // CRUD Operations for Items
+  const handleSaveItem = async (itemData: Omit<Item, "id" | "created_at">) => {
     try {
-      const response = await fetch("/api/meal-sets", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(newMealSet),
-      })
-
-      if (response.ok) {
-        showNotification("Meal set created successfully")
-        setNewMealSet({ name: "", type: "", price: 0, description: "" })
-        fetchMealSets()
-      } else {
-        throw new Error("Failed to create meal set")
+      if (editingItem) {
+        const response = await fetch(`/api/items/${editingItem.id}`, {
+          method: "PUT",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(itemData),
+        })
+        if (response.ok) {
+          toast.success("Item updated successfully")
+          await loadItems()
+        } else {
+          throw new Error("Failed to update item")
+        }
       }
     } catch (error) {
-      showNotification("Error creating meal set", "error")
+      console.error("Error saving item:", error)
+      toast.error("Failed to save item")
     }
+    setIsItemModalOpen(false)
+    setEditingItem(null)
   }
 
-  const handleCreateLocation = async (e: React.FormEvent) => {
-    e.preventDefault()
+  // CRUD Operations for Meal Sets
+  const handleSaveMealSet = async (mealSetData: Omit<MealSet, "id" | "created_at">) => {
     try {
-      const response = await fetch("/api/locations", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(newLocation),
-      })
-
-      if (response.ok) {
-        showNotification("Location created successfully")
-        setNewLocation({ name: "", address: "" })
-        fetchLocations()
-      } else {
-        throw new Error("Failed to create location")
+      if (editingMealSet) {
+        const response = await fetch(`/api/meal-sets/${editingMealSet.id}`, {
+          method: "PUT",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(mealSetData),
+        })
+        if (response.ok) {
+          toast.success("Meal set updated successfully")
+          await loadMealSets()
+        } else {
+          throw new Error("Failed to update meal set")
+        }
       }
     } catch (error) {
-      showNotification("Error creating location", "error")
+      console.error("Error saving meal set:", error)
+      toast.error("Failed to save meal set")
     }
+    setIsMealSetModalOpen(false)
+    setEditingMealSet(null)
   }
 
-  const handleDeleteItem = async (id: number) => {
-    if (!confirm("Are you sure you want to delete this item?")) return
-
+  // CRUD Operations for Catering Services
+  const handleSaveCateringService = async (cateringData: Omit<CateringService, "id" | "created_at">) => {
     try {
-      const response = await fetch(`/api/items/${id}`, {
-        method: "DELETE",
-      })
-
-      if (response.ok) {
-        showNotification("Item deleted successfully")
-        fetchItems()
-      } else {
-        throw new Error("Failed to delete item")
+      if (editingCatering) {
+        const response = await fetch(`/api/catering-services/${editingCatering.id}`, {
+          method: "PUT",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(cateringData),
+        })
+        if (response.ok) {
+          toast.success("Catering service updated successfully")
+          await loadCateringServices()
+        } else {
+          throw new Error("Failed to update catering service")
+        }
       }
     } catch (error) {
-      showNotification("Error deleting item", "error")
+      console.error("Error saving catering service:", error)
+      toast.error("Failed to save catering service")
     }
+    setIsCateringModalOpen(false)
+    setEditingCatering(null)
   }
 
-  const handleUpdateOrderStatus = async (orderId: number, newStatus: string) => {
+  // CRUD Operations for Locations
+  const handleSaveLocation = async (locationData: Omit<Location, "id" | "created_at">) => {
     try {
-      const response = await fetch(`/api/orders/${orderId}`, {
-        method: "PUT",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ status: newStatus }),
-      })
-
-      if (response.ok) {
-        showNotification("Order status updated successfully")
-        fetchOrders()
-      } else {
-        throw new Error("Failed to update order status")
+      if (editingLocation) {
+        const response = await fetch(`/api/locations/${editingLocation.id}`, {
+          method: "PUT",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(locationData),
+        })
+        if (response.ok) {
+          toast.success("Location updated successfully")
+          await loadLocations()
+        } else {
+          throw new Error("Failed to update location")
+        }
       }
     } catch (error) {
-      showNotification("Error updating order status", "error")
+      console.error("Error saving location:", error)
+      toast.error("Failed to save location")
     }
+    setIsLocationModalOpen(false)
+    setEditingLocation(null)
   }
 
+  // CRUD Operations for Payments
+  const handleSavePayment = async (paymentData: Omit<Payment, "id" | "created_at">) => {
+    try {
+      if (editingPayment) {
+        const response = await fetch(`/api/payments/${editingPayment.id}`, {
+          method: "PUT",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(paymentData),
+        })
+        if (response.ok) {
+          toast.success("Payment updated successfully")
+          await loadPayments()
+        } else {
+          throw new Error("Failed to update payment")
+        }
+      }
+    } catch (error) {
+      console.error("Error saving payment:", error)
+      toast.error("Failed to save payment")
+    }
+    setIsPaymentModalOpen(false)
+    setEditingPayment(null)
+  }
+
+  // Filter functions
+  const filteredCustomers = customers.filter(
+    (customer) =>
+      customer.name?.toLowerCase().includes(searchTerm.toLowerCase()) ||
+      customer.email?.toLowerCase().includes(searchTerm.toLowerCase()),
+  )
+
+  const filteredItems = items.filter(
+    (item) =>
+      item.name?.toLowerCase().includes(searchTerm.toLowerCase()) ||
+      item.category?.toLowerCase().includes(searchTerm.toLowerCase()),
+  )
+
+  const filteredMealSets = mealSets.filter(
+    (mealSet) =>
+      mealSet.name?.toLowerCase().includes(searchTerm.toLowerCase()) ||
+      mealSet.type?.toLowerCase().includes(searchTerm.toLowerCase()),
+  )
+
+  const filteredCateringServices = cateringServices.filter(
+    (service) =>
+      service.customer_name?.toLowerCase().includes(searchTerm.toLowerCase()) ||
+      service.event_type?.toLowerCase().includes(searchTerm.toLowerCase()),
+  )
+
+  const filteredLocations = locations.filter(
+    (location) =>
+      location.name?.toLowerCase().includes(searchTerm.toLowerCase()) ||
+      location.address?.toLowerCase().includes(searchTerm.toLowerCase()) ||
+      location.city?.toLowerCase().includes(searchTerm.toLowerCase()),
+  )
+
+  const filteredPayments = payments.filter(
+    (payment) =>
+      payment.customer_name?.toLowerCase().includes(searchTerm.toLowerCase()) ||
+      payment.payment_method?.toLowerCase().includes(searchTerm.toLowerCase()),
+  )
+
+  const filteredOrders = orders.filter(
+    (order) =>
+      order.customer_name?.toLowerCase().includes(searchTerm.toLowerCase()) ||
+      order.status?.toLowerCase().includes(searchTerm.toLowerCase()),
+  )
+
+  // Helper functions for formatting
   const formatCurrency = (amount: number) => {
     return new Intl.NumberFormat("en-PH", {
       style: "currency",
@@ -319,32 +464,52 @@ export default function AdminDashboard() {
       year: "numeric",
       month: "short",
       day: "numeric",
+      hour: "2-digit",
+      minute: "2-digit",
     })
   }
 
-  const getStatusColor = (status: string) => {
-    switch (status.toLowerCase()) {
+  const getStatusBadgeVariant = (status: string) => {
+    switch (status) {
       case "pending":
-        return "bg-yellow-100 text-yellow-800"
+        return "secondary"
       case "confirmed":
-        return "bg-blue-100 text-blue-800"
+        return "default"
       case "preparing":
-        return "bg-orange-100 text-orange-800"
+        return "outline"
       case "delivered":
-        return "bg-green-100 text-green-800"
+        return "default"
       case "cancelled":
-        return "bg-red-100 text-red-800"
+        return "destructive"
+      case "paid":
+        return "default"
+      case "active":
+        return "default"
+      case "available":
+        return "default"
       default:
-        return "bg-gray-100 text-gray-800"
+        return "secondary"
     }
   }
 
-  if (loading) {
+  // Calculate revenue properly
+  const totalRevenue = orders
+    .filter((order) => order.status !== "cancelled")
+    .reduce((sum, order) => sum + Number(order.total_amount || 0), 0)
+
+  const paidRevenue = payments
+    .filter((payment) => payment.status === "paid")
+    .reduce((sum, payment) => sum + Number(payment.amount || 0), 0)
+
+  // Use the higher of the two calculations for more accurate revenue
+  const actualRevenue = Math.max(totalRevenue, paidRevenue)
+
+  if (isLoading) {
     return (
       <div className="min-h-screen bg-gradient-to-br from-red-50 to-orange-50 flex items-center justify-center">
         <div className="text-center">
           <div className="animate-spin rounded-full h-32 w-32 border-b-2 border-red-600 mx-auto mb-4"></div>
-          <p className="text-lg text-gray-600">Loading admin dashboard...</p>
+          <p className="text-lg text-gray-600">Loading dashboard...</p>
         </div>
       </div>
     )
@@ -352,116 +517,237 @@ export default function AdminDashboard() {
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-red-50 to-orange-50">
-      <div className="container mx-auto px-4 py-8">
-        <div className="mb-8">
-          <h1 className="text-4xl font-bold text-gray-900 mb-2">Admin Dashboard</h1>
-          <p className="text-gray-600">Manage your catering business operations</p>
+      <div className="container mx-auto p-6">
+        {/* Header */}
+        <div className="mb-8 flex items-center justify-between">
+          <div className="flex items-center gap-4">
+            <img src="/images/redlogo.png" alt="Saute and Simmer Logo" className="h-12 w-auto object-contain" />
+            <div>
+              <h1 className="text-4xl font-bold text-red-800 mb-2">Admin Dashboard</h1>
+              <p className="text-gray-600">Comprehensive catering management system</p>
+            </div>
+          </div>
+          <Button variant="outline" onClick={handleLogout} className="flex items-center gap-2 bg-transparent">
+            <LogOut className="h-4 w-4" />
+            Logout
+          </Button>
         </div>
 
-        {/* Stats Cards */}
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-8">
-          <Card>
-            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-              <CardTitle className="text-sm font-medium">Total Customers</CardTitle>
-              <Users className="h-4 w-4 text-muted-foreground" />
-            </CardHeader>
-            <CardContent>
-              <div className="text-2xl font-bold">{customers.length}</div>
-            </CardContent>
-          </Card>
-
-          <Card>
-            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-              <CardTitle className="text-sm font-medium">Menu Items</CardTitle>
-              <Package className="h-4 w-4 text-muted-foreground" />
-            </CardHeader>
-            <CardContent>
-              <div className="text-2xl font-bold">{items.length}</div>
-            </CardContent>
-          </Card>
-
-          <Card>
-            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-              <CardTitle className="text-sm font-medium">Total Orders</CardTitle>
-              <ShoppingCart className="h-4 w-4 text-muted-foreground" />
-            </CardHeader>
-            <CardContent>
-              <div className="text-2xl font-bold">{orders.length}</div>
-            </CardContent>
-          </Card>
-
-          <Card>
-            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-              <CardTitle className="text-sm font-medium">Revenue</CardTitle>
-              <DollarSign className="h-4 w-4 text-muted-foreground" />
-            </CardHeader>
-            <CardContent>
-              <div className="text-2xl font-bold">
-                {formatCurrency(orders.reduce((sum, order) => sum + order.total_amount, 0))}
-              </div>
-            </CardContent>
-          </Card>
+        {/* Search Bar */}
+        <div className="mb-6">
+          <div className="relative max-w-md">
+            <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 h-4 w-4" />
+            <Input
+              placeholder="Search across all data..."
+              value={searchTerm}
+              onChange={(e) => setSearchTerm(e.target.value)}
+              className="pl-10"
+            />
+          </div>
         </div>
 
-        {/* Main Content Tabs */}
-        <Tabs defaultValue="orders" className="space-y-6">
-          <TabsList className="grid w-full grid-cols-6">
-            <TabsTrigger value="orders">Orders</TabsTrigger>
-            <TabsTrigger value="customers">Customers</TabsTrigger>
-            <TabsTrigger value="items">Items</TabsTrigger>
-            <TabsTrigger value="meal-sets">Meal Sets</TabsTrigger>
-            <TabsTrigger value="locations">Locations</TabsTrigger>
-            <TabsTrigger value="payments">Payments</TabsTrigger>
+        {/* Main Tabs */}
+        <Tabs value={activeTab} onValueChange={setActiveTab} className="space-y-6">
+          <TabsList className="grid w-full grid-cols-7">
+            <TabsTrigger value="overview" className="flex items-center gap-2">
+              <ShoppingCart className="h-4 w-4" />
+              Overview
+            </TabsTrigger>
+            <TabsTrigger value="customers" className="flex items-center gap-2">
+              <Users className="h-4 w-4" />
+              Customers
+            </TabsTrigger>
+            <TabsTrigger value="items" className="flex items-center gap-2">
+              <Package className="h-4 w-4" />
+              Items
+            </TabsTrigger>
+            <TabsTrigger value="sets" className="flex items-center gap-2">
+              <Layers className="h-4 w-4" />
+              Sets
+            </TabsTrigger>
+            <TabsTrigger value="catering" className="flex items-center gap-2">
+              <Utensils className="h-4 w-4" />
+              Catering
+            </TabsTrigger>
+            <TabsTrigger value="locations" className="flex items-center gap-2">
+              <MapPin className="h-4 w-4" />
+              Locations
+            </TabsTrigger>
+            <TabsTrigger value="payments" className="flex items-center gap-2">
+              <CreditCard className="h-4 w-4" />
+              Payments
+            </TabsTrigger>
           </TabsList>
 
-          {/* Orders Tab */}
-          <TabsContent value="orders">
+          {/* Overview Tab */}
+          <TabsContent value="overview" className="space-y-6">
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
+              <Card>
+                <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+                  <CardTitle className="text-sm font-medium">Total Customers</CardTitle>
+                  <Users className="h-4 w-4 text-muted-foreground" />
+                </CardHeader>
+                <CardContent>
+                  <div className="text-2xl font-bold">{customers.length}</div>
+                  <p className="text-xs text-muted-foreground">Registered users</p>
+                </CardContent>
+              </Card>
+              <Card>
+                <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+                  <CardTitle className="text-sm font-medium">Menu Items</CardTitle>
+                  <Package className="h-4 w-4 text-muted-foreground" />
+                </CardHeader>
+                <CardContent>
+                  <div className="text-2xl font-bold">{items.length}</div>
+                  <p className="text-xs text-muted-foreground">Available items</p>
+                </CardContent>
+              </Card>
+              <Card>
+                <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+                  <CardTitle className="text-sm font-medium">Active Orders</CardTitle>
+                  <ShoppingCart className="h-4 w-4 text-muted-foreground" />
+                </CardHeader>
+                <CardContent>
+                  <div className="text-2xl font-bold">
+                    {orders.filter((o) => o.status !== "cancelled" && o.status !== "delivered").length}
+                  </div>
+                  <p className="text-xs text-muted-foreground">Orders in progress</p>
+                </CardContent>
+              </Card>
+              <Card>
+                <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+                  <CardTitle className="text-sm font-medium">Total Revenue</CardTitle>
+                  <CreditCard className="h-4 w-4 text-muted-foreground" />
+                </CardHeader>
+                <CardContent>
+                  <div className="text-2xl font-bold text-green-600">{formatCurrency(actualRevenue)}</div>
+                  <p className="text-xs text-muted-foreground">
+                    From {orders.filter((o) => o.status !== "cancelled").length} orders
+                  </p>
+                </CardContent>
+              </Card>
+            </div>
+
+            {/* Recent Orders */}
             <Card>
               <CardHeader>
-                <CardTitle>Orders Management</CardTitle>
+                <CardTitle>Recent Orders</CardTitle>
               </CardHeader>
               <CardContent>
+                {orders.length === 0 ? (
+                  <div className="text-center py-8 text-gray-500">
+                    <p>No orders found</p>
+                    <p className="text-sm">Orders will appear here once customers start placing them</p>
+                  </div>
+                ) : (
+                  <Table>
+                    <TableHeader>
+                      <TableRow>
+                        <TableHead>Order ID</TableHead>
+                        <TableHead>Customer</TableHead>
+                        <TableHead>Type</TableHead>
+                        <TableHead>Amount</TableHead>
+                        <TableHead>Status</TableHead>
+                        <TableHead>Date</TableHead>
+                      </TableRow>
+                    </TableHeader>
+                    <TableBody>
+                      {orders
+                        .sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime())
+                        .slice(0, 10)
+                        .map((order) => (
+                          <TableRow key={order.id}>
+                            <TableCell className="font-medium">#{order.id}</TableCell>
+                            <TableCell>
+                              <div>
+                                <div className="font-medium">{order.customer_name}</div>
+                                <div className="text-sm text-gray-500">{order.customer_email}</div>
+                              </div>
+                            </TableCell>
+                            <TableCell>
+                              <div>
+                                <div className="font-medium">{order.meal_set_name || order.order_type}</div>
+                                <div className="text-sm text-gray-500">Qty: {order.quantity}</div>
+                              </div>
+                            </TableCell>
+                            <TableCell className="font-medium text-green-600">
+                              {formatCurrency(order.total_amount)}
+                            </TableCell>
+                            <TableCell>
+                              <Badge variant={getStatusBadgeVariant(order.status)} className="capitalize">
+                                {order.status}
+                              </Badge>
+                            </TableCell>
+                            <TableCell className="text-sm">{formatDate(order.created_at)}</TableCell>
+                          </TableRow>
+                        ))}
+                    </TableBody>
+                  </Table>
+                )}
+              </CardContent>
+            </Card>
+          </TabsContent>
+
+          {/* Customers Tab */}
+          <TabsContent value="customers" className="space-y-6">
+            <div className="flex justify-between items-center">
+              <h2 className="text-2xl font-bold">Customer Management</h2>
+            </div>
+            <Card>
+              <CardContent className="p-6">
                 <Table>
                   <TableHeader>
                     <TableRow>
-                      <TableHead>ID</TableHead>
-                      <TableHead>Customer</TableHead>
-                      <TableHead>Type</TableHead>
-                      <TableHead>Amount</TableHead>
-                      <TableHead>Status</TableHead>
-                      <TableHead>Date</TableHead>
+                      <TableHead>Name</TableHead>
+                      <TableHead>Email</TableHead>
+                      <TableHead>Phone</TableHead>
+                      <TableHead>Address</TableHead>
+                      <TableHead>Joined</TableHead>
                       <TableHead>Actions</TableHead>
                     </TableRow>
                   </TableHeader>
                   <TableBody>
-                    {orders.map((order) => (
-                      <TableRow key={order.id}>
-                        <TableCell>#{order.id}</TableCell>
-                        <TableCell>{order.customer_name}</TableCell>
-                        <TableCell className="capitalize">{order.order_type}</TableCell>
-                        <TableCell>{formatCurrency(order.total_amount)}</TableCell>
+                    {filteredCustomers.map((customer) => (
+                      <TableRow key={customer.id}>
+                        <TableCell>{customer.name}</TableCell>
+                        <TableCell>{customer.email}</TableCell>
+                        <TableCell>{customer.phone}</TableCell>
+                        <TableCell>{customer.address}</TableCell>
+                        <TableCell>{formatDate(customer.created_at)}</TableCell>
                         <TableCell>
-                          <Badge className={getStatusColor(order.status)}>{order.status}</Badge>
-                        </TableCell>
-                        <TableCell>{formatDate(order.created_at)}</TableCell>
-                        <TableCell>
-                          <div className="flex gap-2">
-                            <Select
-                              value={order.status}
-                              onValueChange={(value) => handleUpdateOrderStatus(order.id, value)}
-                            >
-                              <SelectTrigger className="w-32">
-                                <SelectValue />
-                              </SelectTrigger>
-                              <SelectContent>
-                                <SelectItem value="pending">Pending</SelectItem>
-                                <SelectItem value="confirmed">Confirmed</SelectItem>
-                                <SelectItem value="preparing">Preparing</SelectItem>
-                                <SelectItem value="delivered">Delivered</SelectItem>
-                                <SelectItem value="cancelled">Cancelled</SelectItem>
-                              </SelectContent>
-                            </Select>
-                          </div>
+                          <Dialog
+                            open={isCustomerModalOpen && editingCustomer?.id === customer.id}
+                            onOpenChange={(open) => {
+                              setIsCustomerModalOpen(open)
+                              if (!open) setEditingCustomer(null)
+                            }}
+                          >
+                            <DialogTrigger asChild>
+                              <Button
+                                variant="outline"
+                                size="sm"
+                                onClick={() => {
+                                  setEditingCustomer(customer)
+                                  setIsCustomerModalOpen(true)
+                                }}
+                              >
+                                <Edit className="h-4 w-4" />
+                              </Button>
+                            </DialogTrigger>
+                            <DialogContent>
+                              <DialogHeader>
+                                <DialogTitle>Edit Customer</DialogTitle>
+                              </DialogHeader>
+                              <CustomerForm
+                                customer={editingCustomer}
+                                onSave={handleSaveCustomer}
+                                onCancel={() => {
+                                  setIsCustomerModalOpen(false)
+                                  setEditingCustomer(null)
+                                }}
+                              />
+                            </DialogContent>
+                          </Dialog>
                         </TableCell>
                       </TableRow>
                     ))}
@@ -471,364 +757,350 @@ export default function AdminDashboard() {
             </Card>
           </TabsContent>
 
-          {/* Customers Tab */}
-          <TabsContent value="customers">
-            <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-              <Card className="lg:col-span-2">
-                <CardHeader>
-                  <CardTitle>Customers</CardTitle>
-                </CardHeader>
-                <CardContent>
-                  <Table>
-                    <TableHeader>
-                      <TableRow>
-                        <TableHead>Name</TableHead>
-                        <TableHead>Email</TableHead>
-                        <TableHead>Phone</TableHead>
-                        <TableHead>Joined</TableHead>
-                      </TableRow>
-                    </TableHeader>
-                    <TableBody>
-                      {customers.map((customer) => (
-                        <TableRow key={customer.id}>
-                          <TableCell>{customer.name}</TableCell>
-                          <TableCell>{customer.email}</TableCell>
-                          <TableCell>{customer.phone || "N/A"}</TableCell>
-                          <TableCell>{formatDate(customer.created_at)}</TableCell>
-                        </TableRow>
-                      ))}
-                    </TableBody>
-                  </Table>
-                </CardContent>
-              </Card>
-
-              <Card>
-                <CardHeader>
-                  <CardTitle>Add New Customer</CardTitle>
-                </CardHeader>
-                <CardContent>
-                  <form onSubmit={handleCreateCustomer} className="space-y-4">
-                    <div>
-                      <Label htmlFor="customer-name">Name</Label>
-                      <Input
-                        id="customer-name"
-                        value={newCustomer.name}
-                        onChange={(e) => setNewCustomer({ ...newCustomer, name: e.target.value })}
-                        required
-                      />
-                    </div>
-                    <div>
-                      <Label htmlFor="customer-email">Email</Label>
-                      <Input
-                        id="customer-email"
-                        type="email"
-                        value={newCustomer.email}
-                        onChange={(e) => setNewCustomer({ ...newCustomer, email: e.target.value })}
-                        required
-                      />
-                    </div>
-                    <div>
-                      <Label htmlFor="customer-phone">Phone</Label>
-                      <Input
-                        id="customer-phone"
-                        value={newCustomer.phone}
-                        onChange={(e) => setNewCustomer({ ...newCustomer, phone: e.target.value })}
-                      />
-                    </div>
-                    <Button type="submit" className="w-full">
-                      <Plus className="h-4 w-4 mr-2" />
-                      Add Customer
-                    </Button>
-                  </form>
-                </CardContent>
-              </Card>
-            </div>
-          </TabsContent>
-
           {/* Items Tab */}
-          <TabsContent value="items">
-            <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-              <Card className="lg:col-span-2">
-                <CardHeader>
-                  <CardTitle>Menu Items</CardTitle>
-                </CardHeader>
-                <CardContent>
-                  <Table>
-                    <TableHeader>
-                      <TableRow>
-                        <TableHead>Name</TableHead>
-                        <TableHead>Category</TableHead>
-                        <TableHead>Price</TableHead>
-                        <TableHead>Actions</TableHead>
-                      </TableRow>
-                    </TableHeader>
-                    <TableBody>
-                      {items.map((item) => (
-                        <TableRow key={item.id}>
-                          <TableCell>{item.name}</TableCell>
-                          <TableCell className="capitalize">{item.category}</TableCell>
-                          <TableCell>{formatCurrency(item.price)}</TableCell>
-                          <TableCell>
-                            <div className="flex gap-2">
-                              <Button variant="outline" size="sm" onClick={() => setEditingItem(item)}>
-                                <Edit className="h-4 w-4" />
-                              </Button>
-                              <Button variant="outline" size="sm" onClick={() => handleDeleteItem(item.id)}>
-                                <Trash2 className="h-4 w-4" />
-                              </Button>
-                            </div>
-                          </TableCell>
-                        </TableRow>
-                      ))}
-                    </TableBody>
-                  </Table>
-                </CardContent>
-              </Card>
-
-              <Card>
-                <CardHeader>
-                  <CardTitle>Add New Item</CardTitle>
-                </CardHeader>
-                <CardContent>
-                  <form onSubmit={handleCreateItem} className="space-y-4">
-                    <div>
-                      <Label htmlFor="item-name">Name</Label>
-                      <Input
-                        id="item-name"
-                        value={newItem.name}
-                        onChange={(e) => setNewItem({ ...newItem, name: e.target.value })}
-                        required
-                      />
-                    </div>
-                    <div>
-                      <Label htmlFor="item-category">Category</Label>
-                      <Select
-                        value={newItem.category}
-                        onValueChange={(value) => setNewItem({ ...newItem, category: value })}
-                      >
-                        <SelectTrigger>
-                          <SelectValue placeholder="Select category" />
-                        </SelectTrigger>
-                        <SelectContent>
-                          <SelectItem value="main">Main Course</SelectItem>
-                          <SelectItem value="side">Side Dish</SelectItem>
-                          <SelectItem value="snack">Snack</SelectItem>
-                          <SelectItem value="beverage">Beverage</SelectItem>
-                        </SelectContent>
-                      </Select>
-                    </div>
-                    <div>
-                      <Label htmlFor="item-price">Price</Label>
-                      <Input
-                        id="item-price"
-                        type="number"
-                        step="0.01"
-                        value={newItem.price}
-                        onChange={(e) => setNewItem({ ...newItem, price: Number.parseFloat(e.target.value) })}
-                        required
-                      />
-                    </div>
-                    <div>
-                      <Label htmlFor="item-description">Description</Label>
-                      <Textarea
-                        id="item-description"
-                        value={newItem.description}
-                        onChange={(e) => setNewItem({ ...newItem, description: e.target.value })}
-                      />
-                    </div>
-                    <Button type="submit" className="w-full">
-                      <Plus className="h-4 w-4 mr-2" />
-                      Add Item
-                    </Button>
-                  </form>
-                </CardContent>
-              </Card>
+          <TabsContent value="items" className="space-y-6">
+            <div className="flex justify-between items-center">
+              <h2 className="text-2xl font-bold">Item Management</h2>
             </div>
-          </TabsContent>
-
-          {/* Meal Sets Tab */}
-          <TabsContent value="meal-sets">
-            <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-              <Card className="lg:col-span-2">
-                <CardHeader>
-                  <CardTitle>Meal Sets</CardTitle>
-                </CardHeader>
-                <CardContent>
-                  <Table>
-                    <TableHeader>
-                      <TableRow>
-                        <TableHead>Name</TableHead>
-                        <TableHead>Type</TableHead>
-                        <TableHead>Price</TableHead>
-                        <TableHead>Created</TableHead>
-                      </TableRow>
-                    </TableHeader>
-                    <TableBody>
-                      {mealSets.map((mealSet) => (
-                        <TableRow key={mealSet.id}>
-                          <TableCell>{mealSet.name}</TableCell>
-                          <TableCell className="capitalize">{mealSet.type}</TableCell>
-                          <TableCell>{formatCurrency(mealSet.price)}</TableCell>
-                          <TableCell>{formatDate(mealSet.created_at)}</TableCell>
-                        </TableRow>
-                      ))}
-                    </TableBody>
-                  </Table>
-                </CardContent>
-              </Card>
-
-              <Card>
-                <CardHeader>
-                  <CardTitle>Add New Meal Set</CardTitle>
-                </CardHeader>
-                <CardContent>
-                  <form onSubmit={handleCreateMealSet} className="space-y-4">
-                    <div>
-                      <Label htmlFor="mealset-name">Name</Label>
-                      <Input
-                        id="mealset-name"
-                        value={newMealSet.name}
-                        onChange={(e) => setNewMealSet({ ...newMealSet, name: e.target.value })}
-                        required
-                      />
-                    </div>
-                    <div>
-                      <Label htmlFor="mealset-type">Type</Label>
-                      <Select
-                        value={newMealSet.type}
-                        onValueChange={(value) => setNewMealSet({ ...newMealSet, type: value })}
-                      >
-                        <SelectTrigger>
-                          <SelectValue placeholder="Select type" />
-                        </SelectTrigger>
-                        <SelectContent>
-                          <SelectItem value="basic">Basic</SelectItem>
-                          <SelectItem value="standard">Standard</SelectItem>
-                          <SelectItem value="premium">Premium</SelectItem>
-                        </SelectContent>
-                      </Select>
-                    </div>
-                    <div>
-                      <Label htmlFor="mealset-price">Price</Label>
-                      <Input
-                        id="mealset-price"
-                        type="number"
-                        step="0.01"
-                        value={newMealSet.price}
-                        onChange={(e) => setNewMealSet({ ...newMealSet, price: Number.parseFloat(e.target.value) })}
-                        required
-                      />
-                    </div>
-                    <div>
-                      <Label htmlFor="mealset-description">Description</Label>
-                      <Textarea
-                        id="mealset-description"
-                        value={newMealSet.description}
-                        onChange={(e) => setNewMealSet({ ...newMealSet, description: e.target.value })}
-                      />
-                    </div>
-                    <Button type="submit" className="w-full">
-                      <Plus className="h-4 w-4 mr-2" />
-                      Add Meal Set
-                    </Button>
-                  </form>
-                </CardContent>
-              </Card>
-            </div>
-          </TabsContent>
-
-          {/* Locations Tab */}
-          <TabsContent value="locations">
-            <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-              <Card className="lg:col-span-2">
-                <CardHeader>
-                  <CardTitle>Locations</CardTitle>
-                </CardHeader>
-                <CardContent>
-                  <Table>
-                    <TableHeader>
-                      <TableRow>
-                        <TableHead>Name</TableHead>
-                        <TableHead>Address</TableHead>
-                        <TableHead>Created</TableHead>
-                      </TableRow>
-                    </TableHeader>
-                    <TableBody>
-                      {locations.map((location) => (
-                        <TableRow key={location.id}>
-                          <TableCell>{location.name}</TableCell>
-                          <TableCell>{location.address}</TableCell>
-                          <TableCell>{formatDate(location.created_at)}</TableCell>
-                        </TableRow>
-                      ))}
-                    </TableBody>
-                  </Table>
-                </CardContent>
-              </Card>
-
-              <Card>
-                <CardHeader>
-                  <CardTitle>Add New Location</CardTitle>
-                </CardHeader>
-                <CardContent>
-                  <form onSubmit={handleCreateLocation} className="space-y-4">
-                    <div>
-                      <Label htmlFor="location-name">Name</Label>
-                      <Input
-                        id="location-name"
-                        value={newLocation.name}
-                        onChange={(e) => setNewLocation({ ...newLocation, name: e.target.value })}
-                        required
-                      />
-                    </div>
-                    <div>
-                      <Label htmlFor="location-address">Address</Label>
-                      <Textarea
-                        id="location-address"
-                        value={newLocation.address}
-                        onChange={(e) => setNewLocation({ ...newLocation, address: e.target.value })}
-                        required
-                      />
-                    </div>
-                    <Button type="submit" className="w-full">
-                      <MapPin className="h-4 w-4 mr-2" />
-                      Add Location
-                    </Button>
-                  </form>
-                </CardContent>
-              </Card>
-            </div>
-          </TabsContent>
-
-          {/* Payments Tab */}
-          <TabsContent value="payments">
             <Card>
-              <CardHeader>
-                <CardTitle>Payments</CardTitle>
-              </CardHeader>
-              <CardContent>
+              <CardContent className="p-6">
                 <Table>
                   <TableHeader>
                     <TableRow>
-                      <TableHead>ID</TableHead>
-                      <TableHead>Order ID</TableHead>
+                      <TableHead>Name</TableHead>
+                      <TableHead>Category</TableHead>
+                      <TableHead>Price</TableHead>
+                      <TableHead>Status</TableHead>
+                      <TableHead>Description</TableHead>
+                      <TableHead>Actions</TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {filteredItems.map((item) => (
+                      <TableRow key={item.id}>
+                        <TableCell>{item.name}</TableCell>
+                        <TableCell>
+                          <Badge variant="outline">{item.category}</Badge>
+                        </TableCell>
+                        <TableCell>{formatCurrency(item.price)}</TableCell>
+                        <TableCell>
+                          <Badge variant={getStatusBadgeVariant(item.status)}>{item.status}</Badge>
+                        </TableCell>
+                        <TableCell>{item.description}</TableCell>
+                        <TableCell>
+                          <Dialog
+                            open={isItemModalOpen && editingItem?.id === item.id}
+                            onOpenChange={(open) => {
+                              setIsItemModalOpen(open)
+                              if (!open) setEditingItem(null)
+                            }}
+                          >
+                            <DialogTrigger asChild>
+                              <Button
+                                variant="outline"
+                                size="sm"
+                                onClick={() => {
+                                  setEditingItem(item)
+                                  setIsItemModalOpen(true)
+                                }}
+                              >
+                                <Edit className="h-4 w-4" />
+                              </Button>
+                            </DialogTrigger>
+                            <DialogContent>
+                              <DialogHeader>
+                                <DialogTitle>Edit Item</DialogTitle>
+                              </DialogHeader>
+                              <ItemForm
+                                item={editingItem}
+                                onSave={handleSaveItem}
+                                onCancel={() => {
+                                  setIsItemModalOpen(false)
+                                  setEditingItem(null)
+                                }}
+                              />
+                            </DialogContent>
+                          </Dialog>
+                        </TableCell>
+                      </TableRow>
+                    ))}
+                  </TableBody>
+                </Table>
+              </CardContent>
+            </Card>
+          </TabsContent>
+
+          {/* Meal Sets Tab */}
+          <TabsContent value="sets" className="space-y-6">
+            <div className="flex justify-between items-center">
+              <h2 className="text-2xl font-bold">Meal Set Management</h2>
+            </div>
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+              {filteredMealSets.map((mealSet) => (
+                <Card key={mealSet.id}>
+                  <CardHeader>
+                    <div className="flex justify-between items-start">
+                      <div>
+                        <CardTitle>{mealSet.name}</CardTitle>
+                        <Badge variant={mealSet.type === "premium" ? "default" : "secondary"}>{mealSet.type}</Badge>
+                      </div>
+                      <Dialog
+                        open={isMealSetModalOpen && editingMealSet?.id === mealSet.id}
+                        onOpenChange={(open) => {
+                          setIsMealSetModalOpen(open)
+                          if (!open) setEditingMealSet(null)
+                        }}
+                      >
+                        <DialogTrigger asChild>
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            onClick={() => {
+                              setEditingMealSet(mealSet)
+                              setIsMealSetModalOpen(true)
+                            }}
+                          >
+                            <Edit className="h-4 w-4" />
+                          </Button>
+                        </DialogTrigger>
+                        <DialogContent className="max-w-2xl">
+                          <DialogHeader>
+                            <DialogTitle>Edit Meal Set</DialogTitle>
+                          </DialogHeader>
+                          <MealSetForm
+                            mealSet={editingMealSet}
+                            items={items}
+                            onSave={handleSaveMealSet}
+                            onCancel={() => {
+                              setIsMealSetModalOpen(false)
+                              setEditingMealSet(null)
+                            }}
+                          />
+                        </DialogContent>
+                      </Dialog>
+                    </div>
+                  </CardHeader>
+                  <CardContent>
+                    <p className="text-sm text-gray-600 mb-4">{mealSet.description}</p>
+                    <div className="text-2xl font-bold text-red-600 mb-4">{formatCurrency(mealSet.price)}</div>
+                    {mealSet.comment && <p className="text-sm text-gray-500">{mealSet.comment}</p>}
+                  </CardContent>
+                </Card>
+              ))}
+            </div>
+          </TabsContent>
+
+          {/* Catering Services Tab */}
+          <TabsContent value="catering" className="space-y-6">
+            <div className="flex justify-between items-center">
+              <h2 className="text-2xl font-bold">Catering Services</h2>
+            </div>
+            <Card>
+              <CardContent className="p-6">
+                <Table>
+                  <TableHeader>
+                    <TableRow>
+                      <TableHead>Customer</TableHead>
+                      <TableHead>Event Type</TableHead>
+                      <TableHead>Date</TableHead>
+                      <TableHead>Guests</TableHead>
+                      <TableHead>Status</TableHead>
+                      <TableHead>Location</TableHead>
+                      <TableHead>Actions</TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {filteredCateringServices.map((service) => (
+                      <TableRow key={service.id}>
+                        <TableCell>{service.customer_name}</TableCell>
+                        <TableCell>{service.event_type}</TableCell>
+                        <TableCell>{service.event_date}</TableCell>
+                        <TableCell>{service.guest_count}</TableCell>
+                        <TableCell>
+                          <Badge variant={getStatusBadgeVariant(service.status)}>{service.status}</Badge>
+                        </TableCell>
+                        <TableCell>{service.location}</TableCell>
+                        <TableCell>
+                          <Dialog
+                            open={isCateringModalOpen && editingCatering?.id === service.id}
+                            onOpenChange={(open) => {
+                              setIsCateringModalOpen(open)
+                              if (!open) setEditingCatering(null)
+                            }}
+                          >
+                            <DialogTrigger asChild>
+                              <Button
+                                variant="outline"
+                                size="sm"
+                                onClick={() => {
+                                  setEditingCatering(service)
+                                  setIsCateringModalOpen(true)
+                                }}
+                              >
+                                <Edit className="h-4 w-4" />
+                              </Button>
+                            </DialogTrigger>
+                            <DialogContent>
+                              <DialogHeader>
+                                <DialogTitle>Edit Service</DialogTitle>
+                              </DialogHeader>
+                              <CateringServiceForm
+                                service={editingCatering}
+                                customers={customers}
+                                onSave={handleSaveCateringService}
+                                onCancel={() => {
+                                  setIsCateringModalOpen(false)
+                                  setEditingCatering(null)
+                                }}
+                              />
+                            </DialogContent>
+                          </Dialog>
+                        </TableCell>
+                      </TableRow>
+                    ))}
+                  </TableBody>
+                </Table>
+              </CardContent>
+            </Card>
+          </TabsContent>
+
+          {/* Locations Tab */}
+          <TabsContent value="locations" className="space-y-6">
+            <div className="flex justify-between items-center">
+              <h2 className="text-2xl font-bold">Location Management</h2>
+            </div>
+            <Card>
+              <CardContent className="p-6">
+                <Table>
+                  <TableHeader>
+                    <TableRow>
+                      <TableHead>Name</TableHead>
+                      <TableHead>Address</TableHead>
+                      <TableHead>City</TableHead>
+                      <TableHead>Phone</TableHead>
+                      <TableHead>Status</TableHead>
+                      <TableHead>Actions</TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {filteredLocations.map((location) => (
+                      <TableRow key={location.id}>
+                        <TableCell>{location.name}</TableCell>
+                        <TableCell>{location.address}</TableCell>
+                        <TableCell>{location.city}</TableCell>
+                        <TableCell>{location.phone}</TableCell>
+                        <TableCell>
+                          <Badge variant={getStatusBadgeVariant(location.status)}>{location.status}</Badge>
+                        </TableCell>
+                        <TableCell>
+                          <Dialog
+                            open={isLocationModalOpen && editingLocation?.id === location.id}
+                            onOpenChange={(open) => {
+                              setIsLocationModalOpen(open)
+                              if (!open) setEditingLocation(null)
+                            }}
+                          >
+                            <DialogTrigger asChild>
+                              <Button
+                                variant="outline"
+                                size="sm"
+                                onClick={() => {
+                                  setEditingLocation(location)
+                                  setIsLocationModalOpen(true)
+                                }}
+                              >
+                                <Edit className="h-4 w-4" />
+                              </Button>
+                            </DialogTrigger>
+                            <DialogContent>
+                              <DialogHeader>
+                                <DialogTitle>Edit Location</DialogTitle>
+                              </DialogHeader>
+                              <LocationForm
+                                location={editingLocation}
+                                onSave={handleSaveLocation}
+                                onCancel={() => {
+                                  setIsLocationModalOpen(false)
+                                  setEditingLocation(null)
+                                }}
+                              />
+                            </DialogContent>
+                          </Dialog>
+                        </TableCell>
+                      </TableRow>
+                    ))}
+                  </TableBody>
+                </Table>
+              </CardContent>
+            </Card>
+          </TabsContent>
+
+          {/* Payments Tab */}
+          <TabsContent value="payments" className="space-y-6">
+            <div className="flex justify-between items-center">
+              <h2 className="text-2xl font-bold">Payment Management</h2>
+            </div>
+            <Card>
+              <CardContent className="p-6">
+                <Table>
+                  <TableHeader>
+                    <TableRow>
+                      <TableHead>Customer</TableHead>
                       <TableHead>Amount</TableHead>
                       <TableHead>Method</TableHead>
                       <TableHead>Status</TableHead>
                       <TableHead>Date</TableHead>
+                      <TableHead>Transaction ID</TableHead>
+                      <TableHead>Actions</TableHead>
                     </TableRow>
                   </TableHeader>
                   <TableBody>
-                    {payments.map((payment) => (
+                    {filteredPayments.map((payment) => (
                       <TableRow key={payment.id}>
-                        <TableCell>#{payment.id}</TableCell>
-                        <TableCell>#{payment.order_id}</TableCell>
+                        <TableCell>{payment.customer_name}</TableCell>
                         <TableCell>{formatCurrency(payment.amount)}</TableCell>
-                        <TableCell className="capitalize">{payment.payment_method}</TableCell>
+                        <TableCell>{payment.payment_method}</TableCell>
                         <TableCell>
-                          <Badge className={getStatusColor(payment.status)}>{payment.status}</Badge>
+                          <Badge variant={getStatusBadgeVariant(payment.status)}>{payment.status}</Badge>
                         </TableCell>
-                        <TableCell>{formatDate(payment.created_at)}</TableCell>
+                        <TableCell>{formatDate(payment.payment_date)}</TableCell>
+                        <TableCell>{payment.transaction_id}</TableCell>
+                        <TableCell>
+                          <Dialog
+                            open={isPaymentModalOpen && editingPayment?.id === payment.id}
+                            onOpenChange={(open) => {
+                              setIsPaymentModalOpen(open)
+                              if (!open) setEditingPayment(null)
+                            }}
+                          >
+                            <DialogTrigger asChild>
+                              <Button
+                                variant="outline"
+                                size="sm"
+                                onClick={() => {
+                                  setEditingPayment(payment)
+                                  setIsPaymentModalOpen(true)
+                                }}
+                              >
+                                <Edit className="h-4 w-4" />
+                              </Button>
+                            </DialogTrigger>
+                            <DialogContent>
+                              <DialogHeader>
+                                <DialogTitle>Edit Payment</DialogTitle>
+                              </DialogHeader>
+                              <PaymentForm
+                                payment={editingPayment}
+                                customers={customers}
+                                onSave={handleSavePayment}
+                                onCancel={() => {
+                                  setIsPaymentModalOpen(false)
+                                  setEditingPayment(null)
+                                }}
+                              />
+                            </DialogContent>
+                          </Dialog>
+                        </TableCell>
                       </TableRow>
                     ))}
                   </TableBody>
@@ -839,5 +1111,632 @@ export default function AdminDashboard() {
         </Tabs>
       </div>
     </div>
+  )
+}
+
+// Customer Form Component
+function CustomerForm({
+  customer,
+  onSave,
+  onCancel,
+}: {
+  customer: Customer | null
+  onSave: (data: Omit<Customer, "id" | "created_at">) => void
+  onCancel: () => void
+}) {
+  const [formData, setFormData] = useState({
+    name: customer?.name || "",
+    email: customer?.email || "",
+    phone: customer?.phone || "",
+    address: customer?.address || "",
+  })
+
+  const handleSubmit = (e: React.FormEvent) => {
+    e.preventDefault()
+    onSave(formData)
+  }
+
+  return (
+    <form onSubmit={handleSubmit} className="space-y-4">
+      <div>
+        <Label htmlFor="name">Name</Label>
+        <Input
+          id="name"
+          value={formData.name}
+          onChange={(e) => setFormData({ ...formData, name: e.target.value })}
+          required
+        />
+      </div>
+      <div>
+        <Label htmlFor="email">Email</Label>
+        <Input
+          id="email"
+          type="email"
+          value={formData.email}
+          onChange={(e) => setFormData({ ...formData, email: e.target.value })}
+          required
+        />
+      </div>
+      <div>
+        <Label htmlFor="phone">Phone</Label>
+        <Input
+          id="phone"
+          value={formData.phone}
+          onChange={(e) => setFormData({ ...formData, phone: e.target.value })}
+          required
+        />
+      </div>
+      <div>
+        <Label htmlFor="address">Address</Label>
+        <Textarea
+          id="address"
+          value={formData.address}
+          onChange={(e) => setFormData({ ...formData, address: e.target.value })}
+          required
+        />
+      </div>
+      <DialogFooter>
+        <Button type="button" variant="outline" onClick={onCancel}>
+          Cancel
+        </Button>
+        <Button type="submit">Save</Button>
+      </DialogFooter>
+    </form>
+  )
+}
+
+// Item Form Component
+function ItemForm({
+  item,
+  onSave,
+  onCancel,
+}: {
+  item: Item | null
+  onSave: (data: Omit<Item, "id" | "created_at">) => void
+  onCancel: () => void
+}) {
+  const [formData, setFormData] = useState({
+    name: item?.name || "",
+    category: item?.category || "snack",
+    price: item?.price || 0,
+    description: item?.description || "",
+    status: item?.status || "available",
+  })
+
+  const handleSubmit = (e: React.FormEvent) => {
+    e.preventDefault()
+    onSave(formData)
+  }
+
+  return (
+    <form onSubmit={handleSubmit} className="space-y-4">
+      <div>
+        <Label htmlFor="name">Name</Label>
+        <Input
+          id="name"
+          value={formData.name}
+          onChange={(e) => setFormData({ ...formData, name: e.target.value })}
+          required
+        />
+      </div>
+      <div>
+        <Label htmlFor="category">Category</Label>
+        <Select value={formData.category} onValueChange={(value) => setFormData({ ...formData, category: value })}>
+          <SelectTrigger>
+            <SelectValue />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="snack">Snack</SelectItem>
+            <SelectItem value="main">Main Course</SelectItem>
+            <SelectItem value="side">Side Dish</SelectItem>
+            <SelectItem value="beverage">Beverage</SelectItem>
+          </SelectContent>
+        </Select>
+      </div>
+      <div>
+        <Label htmlFor="price">Price (₱)</Label>
+        <Input
+          id="price"
+          type="number"
+          value={formData.price}
+          onChange={(e) => setFormData({ ...formData, price: Number(e.target.value) })}
+          required
+        />
+      </div>
+      <div>
+        <Label htmlFor="status">Status</Label>
+        <Select value={formData.status} onValueChange={(value) => setFormData({ ...formData, status: value })}>
+          <SelectTrigger>
+            <SelectValue />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="available">Available</SelectItem>
+            <SelectItem value="unavailable">Unavailable</SelectItem>
+          </SelectContent>
+        </Select>
+      </div>
+      <div>
+        <Label htmlFor="description">Description</Label>
+        <Textarea
+          id="description"
+          value={formData.description}
+          onChange={(e) => setFormData({ ...formData, description: e.target.value })}
+        />
+      </div>
+      <DialogFooter>
+        <Button type="button" variant="outline" onClick={onCancel}>
+          Cancel
+        </Button>
+        <Button type="submit">Save</Button>
+      </DialogFooter>
+    </form>
+  )
+}
+
+// Meal Set Form Component
+function MealSetForm({
+  mealSet,
+  items,
+  onSave,
+  onCancel,
+}: {
+  mealSet: MealSet | null
+  items: Item[]
+  onSave: (data: Omit<MealSet, "id" | "created_at">) => void
+  onCancel: () => void
+}) {
+  const [formData, setFormData] = useState({
+    name: mealSet?.name || "",
+    type: mealSet?.type || "standard",
+    price: mealSet?.price || 0,
+    description: mealSet?.description || "",
+    items: mealSet?.items || "",
+    comment: mealSet?.comment || "",
+  })
+
+  const handleSubmit = (e: React.FormEvent) => {
+    e.preventDefault()
+    onSave(formData)
+  }
+
+  return (
+    <form onSubmit={handleSubmit} className="space-y-4">
+      <div>
+        <Label htmlFor="name">Set Name</Label>
+        <Input
+          id="name"
+          value={formData.name}
+          onChange={(e) => setFormData({ ...formData, name: e.target.value })}
+          required
+        />
+      </div>
+      <div>
+        <Label htmlFor="type">Type</Label>
+        <Select value={formData.type} onValueChange={(value) => setFormData({ ...formData, type: value })}>
+          <SelectTrigger>
+            <SelectValue />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="basic">Basic</SelectItem>
+            <SelectItem value="standard">Standard</SelectItem>
+            <SelectItem value="premium">Premium</SelectItem>
+          </SelectContent>
+        </Select>
+      </div>
+      <div>
+        <Label htmlFor="price">Price (₱)</Label>
+        <Input
+          id="price"
+          type="number"
+          value={formData.price}
+          onChange={(e) => setFormData({ ...formData, price: Number(e.target.value) })}
+          required
+        />
+      </div>
+      <div>
+        <Label htmlFor="description">Description</Label>
+        <Textarea
+          id="description"
+          value={formData.description}
+          onChange={(e) => setFormData({ ...formData, description: e.target.value })}
+        />
+      </div>
+      <div>
+        <Label htmlFor="items">Items (comma-separated)</Label>
+        <Textarea
+          id="items"
+          value={formData.items}
+          onChange={(e) => setFormData({ ...formData, items: e.target.value })}
+          placeholder="e.g., Grilled Chicken, Rice, Vegetables"
+        />
+      </div>
+      <div>
+        <Label htmlFor="comment">Additional Notes</Label>
+        <Textarea
+          id="comment"
+          value={formData.comment}
+          onChange={(e) => setFormData({ ...formData, comment: e.target.value })}
+        />
+      </div>
+      <DialogFooter>
+        <Button type="button" variant="outline" onClick={onCancel}>
+          Cancel
+        </Button>
+        <Button type="submit">Save</Button>
+      </DialogFooter>
+    </form>
+  )
+}
+
+function CateringServiceForm({
+  service,
+  customers,
+  onSave,
+  onCancel,
+}: {
+  service: CateringService | null
+  customers: Customer[]
+  onSave: (data: Omit<CateringService, "id" | "created_at">) => void
+  onCancel: () => void
+}) {
+  const [formData, setFormData] = useState({
+    customer_id: service?.customer_id || 0,
+    customer_name: service?.customer_name || "",
+    event_type: service?.event_type || "",
+    event_date: service?.event_date || "",
+    guest_count: service?.guest_count || 0,
+    status: service?.status || "pending",
+    location: service?.location || "",
+    special_requests: service?.special_requests || "",
+    order_id: service?.order_id || undefined,
+    location_id: service?.location_id || undefined,
+    payment_method: service?.payment_method || "",
+  })
+
+  const handleCustomerChange = (customerId: string) => {
+    const customer = customers.find((c) => c.id === Number.parseInt(customerId))
+    setFormData({
+      ...formData,
+      customer_id: Number.parseInt(customerId),
+      customer_name: customer?.name || "",
+    })
+  }
+
+  const handleSubmit = (e: React.FormEvent) => {
+    e.preventDefault()
+    onSave(formData)
+  }
+
+  return (
+    <form onSubmit={handleSubmit} className="space-y-4">
+      <div>
+        <Label htmlFor="customer">Customer</Label>
+        <Select value={formData.customer_id.toString()} onValueChange={handleCustomerChange}>
+          <SelectTrigger>
+            <SelectValue placeholder="Select customer" />
+          </SelectTrigger>
+          <SelectContent>
+            {customers.map((customer) => (
+              <SelectItem key={customer.id} value={customer.id.toString()}>
+                {customer.name}
+              </SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
+      </div>
+      <div>
+        <Label htmlFor="eventType">Event Type</Label>
+        <Input
+          id="eventType"
+          value={formData.event_type}
+          onChange={(e) => setFormData({ ...formData, event_type: e.target.value })}
+          required
+        />
+      </div>
+      <div>
+        <Label htmlFor="eventDate">Event Date</Label>
+        <Input
+          id="eventDate"
+          type="date"
+          value={formData.event_date}
+          onChange={(e) => setFormData({ ...formData, event_date: e.target.value })}
+          required
+        />
+      </div>
+      <div>
+        <Label htmlFor="guestCount">Guest Count</Label>
+        <Input
+          id="guestCount"
+          type="number"
+          value={formData.guest_count}
+          onChange={(e) => setFormData({ ...formData, guest_count: Number(e.target.value) })}
+          required
+        />
+      </div>
+      <div>
+        <Label htmlFor="status">Status</Label>
+        <Select value={formData.status} onValueChange={(value) => setFormData({ ...formData, status: value })}>
+          <SelectTrigger>
+            <SelectValue />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="pending">Pending</SelectItem>
+            <SelectItem value="confirmed">Confirmed</SelectItem>
+            <SelectItem value="completed">Completed</SelectItem>
+            <SelectItem value="cancelled">Cancelled</SelectItem>
+          </SelectContent>
+        </Select>
+      </div>
+      <div>
+        <Label htmlFor="location">Location</Label>
+        <Textarea
+          id="location"
+          value={formData.location}
+          onChange={(e) => setFormData({ ...formData, location: e.target.value })}
+          required
+        />
+      </div>
+      <div>
+        <Label htmlFor="paymentMethod">Payment Method</Label>
+        <Input
+          id="paymentMethod"
+          value={formData.payment_method}
+          onChange={(e) => setFormData({ ...formData, payment_method: e.target.value })}
+        />
+      </div>
+      <div>
+        <Label htmlFor="specialRequests">Special Requests</Label>
+        <Textarea
+          id="specialRequests"
+          value={formData.special_requests}
+          onChange={(e) => setFormData({ ...formData, special_requests: e.target.value })}
+        />
+      </div>
+      <DialogFooter>
+        <Button type="button" variant="outline" onClick={onCancel}>
+          Cancel
+        </Button>
+        <Button type="submit">Save</Button>
+      </DialogFooter>
+    </form>
+  )
+}
+
+function LocationForm({
+  location,
+  onSave,
+  onCancel,
+}: {
+  location: Location | null
+  onSave: (data: Omit<Location, "id" | "created_at">) => void
+  onCancel: () => void
+}) {
+  const [formData, setFormData] = useState({
+    name: location?.name || "",
+    address: location?.address || "",
+    city: location?.city || "",
+    phone: location?.phone || "",
+    status: location?.status || "active",
+    state: location?.state || "",
+    zip_code: location?.zip_code || "",
+    country: location?.country || "Philippines",
+  })
+
+  const handleSubmit = (e: React.FormEvent) => {
+    e.preventDefault()
+    onSave(formData)
+  }
+
+  return (
+    <form onSubmit={handleSubmit} className="space-y-4">
+      <div>
+        <Label htmlFor="name">Location Name</Label>
+        <Input
+          id="name"
+          value={formData.name}
+          onChange={(e) => setFormData({ ...formData, name: e.target.value })}
+          required
+        />
+      </div>
+      <div>
+        <Label htmlFor="address">Address</Label>
+        <Textarea
+          id="address"
+          value={formData.address}
+          onChange={(e) => setFormData({ ...formData, address: e.target.value })}
+          required
+        />
+      </div>
+      <div>
+        <Label htmlFor="city">City</Label>
+        <Input
+          id="city"
+          value={formData.city}
+          onChange={(e) => setFormData({ ...formData, city: e.target.value })}
+          required
+        />
+      </div>
+      <div>
+        <Label htmlFor="state">State/Province</Label>
+        <Input
+          id="state"
+          value={formData.state}
+          onChange={(e) => setFormData({ ...formData, state: e.target.value })}
+        />
+      </div>
+      <div>
+        <Label htmlFor="zipCode">ZIP Code</Label>
+        <Input
+          id="zipCode"
+          value={formData.zip_code}
+          onChange={(e) => setFormData({ ...formData, zip_code: e.target.value })}
+        />
+      </div>
+      <div>
+        <Label htmlFor="phone">Phone</Label>
+        <Input
+          id="phone"
+          value={formData.phone}
+          onChange={(e) => setFormData({ ...formData, phone: e.target.value })}
+        />
+      </div>
+      <div>
+        <Label htmlFor="status">Status</Label>
+        <Select value={formData.status} onValueChange={(value) => setFormData({ ...formData, status: value })}>
+          <SelectTrigger>
+            <SelectValue />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="active">Active</SelectItem>
+            <SelectItem value="inactive">Inactive</SelectItem>
+          </SelectContent>
+        </Select>
+      </div>
+      <div>
+        <Label htmlFor="country">Country</Label>
+        <Input
+          id="country"
+          value={formData.country}
+          onChange={(e) => setFormData({ ...formData, country: e.target.value })}
+          required
+        />
+      </div>
+      <DialogFooter>
+        <Button type="button" variant="outline" onClick={onCancel}>
+          Cancel
+        </Button>
+        <Button type="submit">Save</Button>
+      </DialogFooter>
+    </form>
+  )
+}
+
+function PaymentForm({
+  payment,
+  customers,
+  onSave,
+  onCancel,
+}: {
+  payment: Payment | null
+  customers: Customer[]
+  onSave: (data: Omit<Payment, "id" | "created_at">) => void
+  onCancel: () => void
+}) {
+  const [formData, setFormData] = useState({
+    customer_id: payment?.customer_id || 0,
+    customer_name: payment?.customer_name || "",
+    amount: payment?.amount || 0,
+    transaction_id: payment?.transaction_id || "",
+    payment_date: payment?.payment_date || new Date().toISOString().split("T")[0],
+    order_id: payment?.order_id || undefined,
+    payment_method: payment?.payment_method || "",
+    status: payment?.status || "pending",
+  })
+
+  const handleCustomerChange = (customerId: string) => {
+    const customer = customers.find((c) => c.id === Number.parseInt(customerId))
+    setFormData({
+      ...formData,
+      customer_id: Number.parseInt(customerId),
+      customer_name: customer?.name || "",
+    })
+  }
+
+  const handleSubmit = (e: React.FormEvent) => {
+    e.preventDefault()
+    onSave(formData)
+  }
+
+  return (
+    <form onSubmit={handleSubmit} className="space-y-4">
+      <div>
+        <Label htmlFor="customer">Customer</Label>
+        <Select value={formData.customer_id.toString()} onValueChange={handleCustomerChange}>
+          <SelectTrigger>
+            <SelectValue placeholder="Select customer" />
+          </SelectTrigger>
+          <SelectContent>
+            {customers.map((customer) => (
+              <SelectItem key={customer.id} value={customer.id.toString()}>
+                {customer.name}
+              </SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
+      </div>
+      <div>
+        <Label htmlFor="amount">Amount (₱)</Label>
+        <Input
+          id="amount"
+          type="number"
+          value={formData.amount}
+          onChange={(e) => setFormData({ ...formData, amount: Number(e.target.value) })}
+          required
+        />
+      </div>
+      <div>
+        <Label htmlFor="paymentMethod">Payment Method</Label>
+        <Select
+          value={formData.payment_method}
+          onValueChange={(value) => setFormData({ ...formData, payment_method: value })}
+        >
+          <SelectTrigger>
+            <SelectValue />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="cash">Cash</SelectItem>
+            <SelectItem value="bank">Bank Transfer</SelectItem>
+            <SelectItem value="gcash">GCash</SelectItem>
+            <SelectItem value="credit">Credit Card</SelectItem>
+          </SelectContent>
+        </Select>
+      </div>
+      <div>
+        <Label htmlFor="status">Status</Label>
+        <Select value={formData.status} onValueChange={(value) => setFormData({ ...formData, status: value })}>
+          <SelectTrigger>
+            <SelectValue />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="pending">Pending</SelectItem>
+            <SelectItem value="paid">Paid</SelectItem>
+            <SelectItem value="cancelled">Cancelled</SelectItem>
+            <SelectItem value="refunded">Refunded</SelectItem>
+          </SelectContent>
+        </Select>
+      </div>
+      <div>
+        <Label htmlFor="transactionId">Transaction ID</Label>
+        <Input
+          id="transactionId"
+          value={formData.transaction_id}
+          onChange={(e) => setFormData({ ...formData, transaction_id: e.target.value })}
+        />
+      </div>
+      <div>
+        <Label htmlFor="paymentDate">Payment Date</Label>
+        <Input
+          id="paymentDate"
+          type="date"
+          value={formData.payment_date}
+          onChange={(e) => setFormData({ ...formData, payment_date: e.target.value })}
+          required
+        />
+      </div>
+      <DialogFooter>
+        <Button type="button" variant="outline" onClick={onCancel}>
+          Cancel
+        </Button>
+        <Button type="submit">Save</Button>
+      </DialogFooter>
+    </form>
+  )
+}
+
+export default function AdminPage() {
+  return (
+    <AdminAuthWrapper>
+      <AdminDashboard />
+    </AdminAuthWrapper>
   )
 }
