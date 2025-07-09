@@ -3,9 +3,10 @@ import { createClient } from "@supabase/supabase-js"
 
 const supabase = createClient(process.env.NEXT_PUBLIC_SUPABASE_URL!, process.env.SUPABASE_SERVICE_ROLE_KEY!)
 
-export async function GET(request: NextRequest, { params }: { params: { id: string } }) {
+export async function GET(request: NextRequest, context: { params: Promise<{ id: string }> }) {
   try {
-    const { data: location, error } = await supabase.from("locations").select("*").eq("id", params.id).single()
+    const { id } = await context.params
+    const { data: location, error } = await supabase.from("locations").select("*").eq("id", id).single()
 
     if (error) {
       console.error("Error fetching location:", error)
@@ -23,8 +24,9 @@ export async function GET(request: NextRequest, { params }: { params: { id: stri
   }
 }
 
-export async function PUT(request: NextRequest, { params }: { params: { id: string } }) {
+export async function PUT(request: NextRequest, context: { params: Promise<{ id: string }> }) {
   try {
+    const { id } = await context.params
     const body = await request.json()
 
     const locationData = {
@@ -40,7 +42,7 @@ export async function PUT(request: NextRequest, { params }: { params: { id: stri
     const { data: location, error } = await supabase
       .from("locations")
       .update(locationData)
-      .eq("id", params.id)
+      .eq("id", id)
       .select()
       .single()
 
@@ -56,9 +58,10 @@ export async function PUT(request: NextRequest, { params }: { params: { id: stri
   }
 }
 
-export async function DELETE(request: NextRequest, { params }: { params: { id: string } }) {
+export async function DELETE(request: NextRequest, context: { params: Promise<{ id: string }> }) {
   try {
-    const { error } = await supabase.from("locations").delete().eq("id", params.id)
+    const { id } = await context.params
+    const { error } = await supabase.from("locations").delete().eq("id", id)
 
     if (error) {
       console.error("Error deleting location:", error)
