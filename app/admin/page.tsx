@@ -339,6 +339,20 @@ function AdminDashboard() {
     const extractItemNames = (data: any): string[] => {
       const names: string[] = []
 
+      // If data is a string, try to parse it as JSON first
+      if (typeof data === "string") {
+        try {
+          data = JSON.parse(data)
+        } catch (e) {
+          // If parsing fails, treat as comma-separated string
+          const itemList = data
+            .split(",")
+            .map((item) => item.trim())
+            .filter((item) => item.length > 0)
+          return itemList
+        }
+      }
+
       if (Array.isArray(data)) {
         data.forEach((item) => {
           if (typeof item === "string") {
@@ -360,13 +374,6 @@ function AdminDashboard() {
             })
           }
         })
-      } else if (typeof data === "string") {
-        // Handle comma-separated string
-        const itemList = data
-          .split(",")
-          .map((item) => item.trim())
-          .filter((item) => item.length > 0)
-        names.push(...itemList)
       }
 
       return names
