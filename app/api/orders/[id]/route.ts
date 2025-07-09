@@ -1,9 +1,9 @@
 import { type NextRequest, NextResponse } from "next/server"
 import { createServerClient } from "@/lib/supabase"
 
-export async function GET(request: NextRequest, context: { params: { id: string } }) {
+export async function GET(request: NextRequest, context: { params: Promise<{ id: string }> }) {
   try {
-    const { id } = context.params
+    const { id } = await context.params
     const supabase = createServerClient()
 
     const { data: order, error } = await supabase.from("orders").select("*").eq("id", Number.parseInt(id)).single()
@@ -23,21 +23,15 @@ export async function GET(request: NextRequest, context: { params: { id: string 
   }
 }
 
-export async function PUT(request: NextRequest, context: { params: { id: string } }) {
+export async function PUT(request: NextRequest, context: { params: Promise<{ id: string }> }) {
   try {
-    const { id } = context.params
+    const { id } = await context.params
     const body = await request.json()
     const supabase = createServerClient()
 
-    // Add updated_at timestamp to the update data
-    const updateData = {
-      ...body,
-      updated_at: new Date().toISOString(),
-    }
-
     const { data: order, error } = await supabase
       .from("orders")
-      .update(updateData)
+      .update(body)
       .eq("id", Number.parseInt(id))
       .select()
       .single()
@@ -57,9 +51,9 @@ export async function PUT(request: NextRequest, context: { params: { id: string 
   }
 }
 
-export async function DELETE(request: NextRequest, context: { params: { id: string } }) {
+export async function DELETE(request: NextRequest, context: { params: Promise<{ id: string }> }) {
   try {
-    const { id } = context.params
+    const { id } = await context.params
     const supabase = createServerClient()
 
     const { error } = await supabase.from("orders").delete().eq("id", Number.parseInt(id))
