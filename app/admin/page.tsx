@@ -68,7 +68,6 @@ interface Location {
   id: number
   name: string
   address: string
-  city: string
   phone?: string
   status: string
   created_at: string
@@ -435,8 +434,7 @@ function AdminDashboard() {
   const filteredLocations = locations.filter(
     (location) =>
       location.name?.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      location.address?.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      location.city?.toLowerCase().includes(searchTerm.toLowerCase()),
+      location.address?.toLowerCase().includes(searchTerm.toLowerCase()),
   )
 
   const filteredPayments = payments.filter(
@@ -976,7 +974,6 @@ function AdminDashboard() {
                     <TableRow>
                       <TableHead>Name</TableHead>
                       <TableHead>Address</TableHead>
-                      <TableHead>City</TableHead>
                       <TableHead>Phone</TableHead>
                       <TableHead>Status</TableHead>
                       <TableHead>Actions</TableHead>
@@ -987,7 +984,6 @@ function AdminDashboard() {
                       <TableRow key={location.id}>
                         <TableCell>{location.name}</TableCell>
                         <TableCell>{location.address}</TableCell>
-                        <TableCell>{location.city}</TableCell>
                         <TableCell>{location.phone}</TableCell>
                         <TableCell>
                           <Badge variant={getStatusBadgeVariant(location.status)}>{location.status}</Badge>
@@ -1514,7 +1510,6 @@ function LocationForm({
   const [formData, setFormData] = useState({
     name: location?.name || "",
     address: location?.address || "",
-    city: location?.city || "",
     phone: location?.phone || "",
     status: location?.status || "active",
     state: location?.state || "",
@@ -1544,15 +1539,6 @@ function LocationForm({
           id="address"
           value={formData.address}
           onChange={(e) => setFormData({ ...formData, address: e.target.value })}
-          required
-        />
-      </div>
-      <div>
-        <Label htmlFor="city">City</Label>
-        <Input
-          id="city"
-          value={formData.city}
-          onChange={(e) => setFormData({ ...formData, city: e.target.value })}
           required
         />
       </div>
