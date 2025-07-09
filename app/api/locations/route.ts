@@ -15,7 +15,7 @@ export async function GET() {
       return NextResponse.json({ error: "Failed to fetch locations" }, { status: 500 })
     }
 
-    return NextResponse.json(locations)
+    return NextResponse.json(locations || [])
   } catch (error) {
     console.error("Error in GET /api/locations:", error)
     return NextResponse.json({ error: "Internal server error" }, { status: 500 })
@@ -26,26 +26,24 @@ export async function POST(request: NextRequest) {
   try {
     const body = await request.json()
 
-    const { data: location, error } = await supabase
-      .from("locations")
-      .insert({
-        name: body.name,
-        address: body.address,
-        phone: body.phone,
-        status: body.status || "active",
-        state: body.state,
-        zip_code: body.zip_code,
-        country: body.country || "Philippines",
-      })
-      .select()
-      .single()
+    const locationData = {
+      name: body.name,
+      address: body.address,
+      phone: body.phone,
+      status: body.status || "active",
+      state: body.state,
+      zip_code: body.zip_code,
+      country: body.country || "USA",
+    }
+
+    const { data: location, error } = await supabase.from("locations").insert([locationData]).select().single()
 
     if (error) {
       console.error("Error creating location:", error)
       return NextResponse.json({ error: "Failed to create location" }, { status: 500 })
     }
 
-    return NextResponse.json({ success: true, location })
+    return NextResponse.json(location, { status: 201 })
   } catch (error) {
     console.error("Error in POST /api/locations:", error)
     return NextResponse.json({ error: "Internal server error" }, { status: 500 })
