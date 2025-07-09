@@ -166,29 +166,37 @@ export default function OrderDetailsPage() {
 
       const totalAmount = getTotalPrice() * quantity
 
-      // Prepare order data
+      // Prepare order data with all required fields
       const orderData = {
-        order_type: isCustomOrder ? "custom" : "meal_set",
-        meal_set_name: selectedMealSet?.name,
-        meal_set_id: selectedMealSet?.id,
-        quantity: quantity,
+        // Required fields for the database
+        customer_name: formData.contactPerson || session.user.email || "Unknown Customer",
         total_amount: totalAmount,
+
+        // Additional order details
+        customer_id: null, // Will be set by the API if customer exists
+        customer_email: formData.email,
+        order_type: isCustomOrder ? "custom" : "meal_set",
+        meal_set_id: selectedMealSet?.id || null,
+        meal_set_name: selectedMealSet?.name || null,
+        quantity: quantity,
+        order_date: new Date().toISOString().split("T")[0],
         event_type: formData.eventType,
-        event_date: formData.eventDate,
+        event_date: formData.eventDate || null,
+        delivery_date: formData.eventDate || null,
         delivery_address: formData.deliveryAddress,
         contact_person: formData.contactPerson,
         contact_number: formData.contactNumber,
         payment_method: formData.paymentMethod,
         special_requests: formData.specialRequests,
-        selected_items: isCustomOrder ? selectedItems : null,
+        special_instructions: formData.specialRequests,
+
+        // For custom orders, include selected items
+        items: isCustomOrder ? selectedItems : [],
       }
 
       console.log("Submitting order:", orderData)
 
-      // Choose the appropriate API endpoint
-      const apiEndpoint = isCustomOrder ? "/api/orders" : "/api/meal-set-orders"
-
-      const response = await fetch(apiEndpoint, {
+      const response = await fetch("/api/orders", {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
@@ -199,8 +207,8 @@ export default function OrderDetailsPage() {
 
       const result = await response.json()
 
-      if (response.ok && result.success) {
-        console.log("Order placed successfully:", result.order)
+      if (response.ok) {
+        console.log("Order placed successfully:", result)
         setOrderSuccess(true)
         window.scrollTo(0, 0)
       } else {
