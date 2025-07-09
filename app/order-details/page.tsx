@@ -1,7 +1,7 @@
 "use client"
 
 import type React from "react"
-import { useState, useEffect } from "react"
+import { useState, useEffect, Suspense } from "react"
 import { useSearchParams } from "next/navigation"
 import Header from "../../components/Header"
 import Footer from "../../components/Footer"
@@ -24,7 +24,7 @@ interface MenuItem {
   description: string
 }
 
-export default function OrderDetailsPage() {
+function OrderDetailsContent() {
   const searchParams = useSearchParams()
   const [selectedMealSet, setSelectedMealSet] = useState<MealSet | null>(null)
   const [selectedItems, setSelectedItems] = useState<{ [key: string]: MenuItem[] }>({
@@ -55,12 +55,12 @@ export default function OrderDetailsPage() {
 
   useEffect(() => {
     const initializeOrder = async () => {
-      // Check authentication
       try {
         const {
           data: { session },
           error,
         } = await supabase.auth.getSession()
+
         if (error || !session) {
           alert("Please login first to place an order.")
           window.location.href = "/login"
@@ -92,7 +92,6 @@ export default function OrderDetailsPage() {
             console.error("Error parsing items:", error)
           }
         } else if (setId) {
-          // Load meal set details
           await loadMealSet(Number.parseInt(setId))
         }
 
@@ -168,13 +167,13 @@ export default function OrderDetailsPage() {
 
       // Prepare order data with all required fields
       const orderData = {
-        // Required fields for the database
         customer_name: formData.contactPerson || session.user.email || "Unknown Customer",
-        total_amount: totalAmount,
-
-        // Additional order details
-        customer_id: null, // Will be set by the API if customer exists
         customer_email: formData.email,
+        contact_number: formData.contactNumber,
+        delivery_address: formData.deliveryAddress,
+        payment_method: formData.paymentMethod,
+        special_requests: formData.specialRequests,
+        total_amount: totalAmount,
         order_type: isCustomOrder ? "custom" : "meal_set",
         meal_set_id: selectedMealSet?.id || null,
         meal_set_name: selectedMealSet?.name || null,
@@ -183,15 +182,10 @@ export default function OrderDetailsPage() {
         event_type: formData.eventType,
         event_date: formData.eventDate || null,
         delivery_date: formData.eventDate || null,
-        delivery_address: formData.deliveryAddress,
         contact_person: formData.contactPerson,
-        contact_number: formData.contactNumber,
-        payment_method: formData.paymentMethod,
-        special_requests: formData.specialRequests,
         special_instructions: formData.specialRequests,
-
-        // For custom orders, include selected items
         items: isCustomOrder ? selectedItems : [],
+        guest_count: quantity,
       }
 
       console.log("Submitting order:", orderData)
@@ -239,12 +233,8 @@ export default function OrderDetailsPage() {
       <>
         <Header />
         <section style={{ textAlign: "center", padding: "50px 20px", maxWidth: "1400px", margin: "0 auto" }}>
-          <div style={{ fontSize: "5rem", color: "var(--success-color)", marginBottom: "20px" }}>
-            <i className="fas fa-check-circle"></i>
-          </div>
-          <h2 style={{ fontSize: "2rem", marginBottom: "15px", color: "var(--success-color)" }}>
-            Order Placed Successfully!
-          </h2>
+          <div style={{ fontSize: "5rem", color: "#22c55e", marginBottom: "20px" }}>✓</div>
+          <h2 style={{ fontSize: "2rem", marginBottom: "15px", color: "#22c55e" }}>Order Placed Successfully!</h2>
           <p
             style={{
               fontSize: "1.2rem",
@@ -293,7 +283,7 @@ export default function OrderDetailsPage() {
             </div>
             <div style={{ display: "flex", marginBottom: "10px" }}>
               <div style={{ width: "150px", fontWeight: "500" }}>Total Amount:</div>
-              <div style={{ flex: 1, fontWeight: "600", color: "var(--primary-color)" }}>
+              <div style={{ flex: 1, fontWeight: "600", color: "#dc2626" }}>
                 ₱{(getTotalPrice() * quantity).toFixed(2)}
               </div>
             </div>
@@ -301,12 +291,33 @@ export default function OrderDetailsPage() {
           <div style={{ marginTop: "30px" }}>
             <button
               onClick={() => (window.location.href = "/orders")}
-              className="btn btn-outline"
-              style={{ marginRight: "10px" }}
+              style={{
+                marginRight: "10px",
+                padding: "12px 24px",
+                backgroundColor: "transparent",
+                color: "#dc2626",
+                border: "2px solid #dc2626",
+                borderRadius: "8px",
+                cursor: "pointer",
+                fontSize: "1rem",
+                fontWeight: "500",
+              }}
             >
               View My Orders
             </button>
-            <button onClick={() => (window.location.href = "/")} className="btn btn-primary">
+            <button
+              onClick={() => (window.location.href = "/")}
+              style={{
+                padding: "12px 24px",
+                backgroundColor: "#dc2626",
+                color: "white",
+                border: "none",
+                borderRadius: "8px",
+                cursor: "pointer",
+                fontSize: "1rem",
+                fontWeight: "500",
+              }}
+            >
               Back to Home
             </button>
           </div>
@@ -332,13 +343,13 @@ export default function OrderDetailsPage() {
         {/* Order Details */}
         <div
           style={{
-            backgroundColor: "var(--light-text)",
+            backgroundColor: "white",
             borderRadius: "15px",
             padding: "30px",
-            boxShadow: "0 10px 20px var(--shadow-color)",
+            boxShadow: "0 10px 20px rgba(0,0,0,0.1)",
           }}
         >
-          <h2 style={{ fontSize: "1.5rem", marginBottom: "20px", color: "var(--primary-color)" }}>Order Details</h2>
+          <h2 style={{ fontSize: "1.5rem", marginBottom: "20px", color: "#dc2626" }}>Order Details</h2>
           <div style={{ marginBottom: "20px" }}>
             <div style={{ display: "flex", marginBottom: "10px" }}>
               <div style={{ width: "150px", fontWeight: "500" }}>Order Type:</div>
@@ -352,13 +363,11 @@ export default function OrderDetailsPage() {
 
           {selectedMealSet && (
             <div style={{ marginBottom: "20px" }}>
-              <h3 style={{ fontSize: "1.2rem", color: "var(--primary-color)", marginBottom: "10px" }}>
-                Selected Meal Set
-              </h3>
+              <h3 style={{ fontSize: "1.2rem", color: "#dc2626", marginBottom: "10px" }}>Selected Meal Set</h3>
               <div style={{ padding: "15px", backgroundColor: "#f9f9f9", borderRadius: "8px" }}>
                 <h4 style={{ margin: "0 0 5px 0", fontWeight: "600" }}>{selectedMealSet.name}</h4>
                 <p style={{ margin: "0 0 10px 0", color: "#666", fontSize: "0.9rem" }}>{selectedMealSet.description}</p>
-                <div style={{ fontSize: "1.1rem", fontWeight: "600", color: "var(--primary-color)" }}>
+                <div style={{ fontSize: "1.1rem", fontWeight: "600", color: "#dc2626" }}>
                   ₱{selectedMealSet.price.toFixed(2)}
                 </div>
                 {selectedMealSet.comment && (
@@ -367,7 +376,7 @@ export default function OrderDetailsPage() {
                       margin: "10px 0 0 0",
                       fontSize: "0.9rem",
                       fontStyle: "italic",
-                      color: "var(--accent-color)",
+                      color: "#f59e0b",
                     }}
                   >
                     {selectedMealSet.comment}
@@ -379,9 +388,7 @@ export default function OrderDetailsPage() {
 
           {isCustomOrder && (
             <div style={{ marginBottom: "20px" }}>
-              <h3 style={{ fontSize: "1.2rem", color: "var(--primary-color)", marginBottom: "10px" }}>
-                Selected Items
-              </h3>
+              <h3 style={{ fontSize: "1.2rem", color: "#dc2626", marginBottom: "10px" }}>Selected Items</h3>
               {Object.entries(selectedItems).map(([category, items]) => {
                 if (items.length === 0) return null
                 return (
@@ -389,7 +396,7 @@ export default function OrderDetailsPage() {
                     <h4
                       style={{
                         fontSize: "1rem",
-                        color: "var(--primary-color)",
+                        color: "#dc2626",
                         marginBottom: "8px",
                         textTransform: "capitalize",
                       }}
@@ -430,7 +437,7 @@ export default function OrderDetailsPage() {
                 display: "flex",
                 justifyContent: "space-between",
                 fontSize: "1.2rem",
-                color: "var(--primary-color)",
+                color: "#dc2626",
                 fontWeight: "600",
               }}
             >
@@ -443,13 +450,13 @@ export default function OrderDetailsPage() {
         {/* Customer Form */}
         <div
           style={{
-            backgroundColor: "var(--light-text)",
+            backgroundColor: "white",
             borderRadius: "15px",
             padding: "30px",
-            boxShadow: "0 10px 20px var(--shadow-color)",
+            boxShadow: "0 10px 20px rgba(0,0,0,0.1)",
           }}
         >
-          <h2 style={{ fontSize: "1.5rem", marginBottom: "20px", color: "var(--primary-color)" }}>Event Information</h2>
+          <h2 style={{ fontSize: "1.5rem", marginBottom: "20px", color: "#dc2626" }}>Event Information</h2>
           <form onSubmit={handleSubmit}>
             <div style={{ marginBottom: "20px" }}>
               <label style={{ display: "block", marginBottom: "8px", fontWeight: "500" }}>Type of Event *</label>
@@ -464,8 +471,8 @@ export default function OrderDetailsPage() {
                   border: "1px solid #ddd",
                   borderRadius: "8px",
                   fontSize: "1rem",
-                  fontFamily: "Poppins, sans-serif",
-                  backgroundColor: "var(--light-text)",
+                  fontFamily: "inherit",
+                  backgroundColor: "white",
                   cursor: "pointer",
                 }}
               >
@@ -497,7 +504,7 @@ export default function OrderDetailsPage() {
                   border: "1px solid #ddd",
                   borderRadius: "8px",
                   fontSize: "1rem",
-                  fontFamily: "Poppins, sans-serif",
+                  fontFamily: "inherit",
                 }}
               />
             </div>
@@ -517,7 +524,7 @@ export default function OrderDetailsPage() {
                     border: "1px solid #ddd",
                     borderRadius: "8px",
                     fontSize: "1rem",
-                    fontFamily: "Poppins, sans-serif",
+                    fontFamily: "inherit",
                   }}
                 />
               </div>
@@ -535,7 +542,7 @@ export default function OrderDetailsPage() {
                     border: "1px solid #ddd",
                     borderRadius: "8px",
                     fontSize: "1rem",
-                    fontFamily: "Poppins, sans-serif",
+                    fontFamily: "inherit",
                   }}
                 />
               </div>
@@ -555,7 +562,7 @@ export default function OrderDetailsPage() {
                   border: "1px solid #ddd",
                   borderRadius: "8px",
                   fontSize: "1rem",
-                  fontFamily: "Poppins, sans-serif",
+                  fontFamily: "inherit",
                   resize: "vertical",
                   minHeight: "100px",
                 }}
@@ -577,7 +584,7 @@ export default function OrderDetailsPage() {
                   border: "1px solid #ddd",
                   borderRadius: "8px",
                   fontSize: "1rem",
-                  fontFamily: "Poppins, sans-serif",
+                  fontFamily: "inherit",
                 }}
               />
             </div>
@@ -597,7 +604,7 @@ export default function OrderDetailsPage() {
                   border: "1px solid #ddd",
                   borderRadius: "8px",
                   fontSize: "1rem",
-                  fontFamily: "Poppins, sans-serif",
+                  fontFamily: "inherit",
                 }}
               />
             </div>
@@ -617,7 +624,7 @@ export default function OrderDetailsPage() {
                   border: "1px solid #ddd",
                   borderRadius: "8px",
                   fontSize: "1rem",
-                  fontFamily: "Poppins, sans-serif",
+                  fontFamily: "inherit",
                 }}
               />
             </div>
@@ -635,8 +642,8 @@ export default function OrderDetailsPage() {
                   border: "1px solid #ddd",
                   borderRadius: "8px",
                   fontSize: "1rem",
-                  fontFamily: "Poppins, sans-serif",
-                  backgroundColor: "var(--light-text)",
+                  fontFamily: "inherit",
+                  backgroundColor: "white",
                   cursor: "pointer",
                 }}
               >
@@ -662,7 +669,7 @@ export default function OrderDetailsPage() {
                   border: "1px solid #ddd",
                   borderRadius: "8px",
                   fontSize: "1rem",
-                  fontFamily: "Poppins, sans-serif",
+                  fontFamily: "inherit",
                   resize: "vertical",
                   minHeight: "100px",
                 }}
@@ -673,12 +680,17 @@ export default function OrderDetailsPage() {
               <button
                 type="submit"
                 disabled={isSubmitting}
-                className="btn btn-primary"
                 style={{
                   width: "100%",
                   padding: "12px",
-                  opacity: isSubmitting ? 0.7 : 1,
+                  backgroundColor: isSubmitting ? "#9ca3af" : "#dc2626",
+                  color: "white",
+                  border: "none",
+                  borderRadius: "8px",
+                  fontSize: "1rem",
+                  fontWeight: "500",
                   cursor: isSubmitting ? "not-allowed" : "pointer",
+                  opacity: isSubmitting ? 0.7 : 1,
                 }}
               >
                 {isSubmitting ? "Placing Order..." : "Place Order"}
@@ -689,5 +701,19 @@ export default function OrderDetailsPage() {
       </section>
       <Footer />
     </>
+  )
+}
+
+export default function OrderDetailsPage() {
+  return (
+    <Suspense
+      fallback={
+        <div style={{ textAlign: "center", padding: "100px 20px" }}>
+          <div style={{ fontSize: "2rem", marginBottom: "20px" }}>Loading...</div>
+        </div>
+      }
+    >
+      <OrderDetailsContent />
+    </Suspense>
   )
 }
