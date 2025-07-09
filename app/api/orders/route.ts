@@ -9,7 +9,7 @@ export async function GET() {
 
     if (error) {
       console.error("Error fetching orders:", error)
-      return NextResponse.json({ error: "Failed to fetch orders" }, { status: 500 })
+      return NextResponse.json({ error: error.message }, { status: 500 })
     }
 
     return NextResponse.json(orders)
@@ -26,13 +26,15 @@ export async function POST(request: NextRequest) {
 
     // Validate required fields
     if (!body.customer_name || !body.total_amount) {
-      return NextResponse.json({ error: "Missing required fields: customer_name, total_amount" }, { status: 400 })
+      return NextResponse.json(
+        { error: "Missing required fields: customer_name and total_amount are required" },
+        { status: 400 },
+      )
     }
 
-    // Create or find customer
+    // Create or get customer
     let customerId = null
     if (body.customer_email) {
-      // Check if customer exists
       const { data: existingCustomer } = await supabase
         .from("customers")
         .select("id")
@@ -42,7 +44,6 @@ export async function POST(request: NextRequest) {
       if (existingCustomer) {
         customerId = existingCustomer.id
       } else {
-        // Create new customer
         const { data: newCustomer, error: customerError } = await supabase
           .from("customers")
           .insert({
@@ -57,125 +58,92 @@ export async function POST(request: NextRequest) {
         if (customerError) {
           console.error("Error creating customer:", customerError)
         } else {
-          customerId = newCustomer.id
+          customerId = newCustomer?.id
         }
       }
     }
 
-    // Create location record for delivery address
+    // Create location if delivery address is provided
     let locationId = null
     if (body.delivery_address) {
-      // Ensure we have a phone number to store
-      const phoneNumber = body.contact_number || body.phone || "Not provided"
-
       const { data: newLocation, error: locationError } = await supabase
         .from("locations")
         .insert({
           name: `${body.customer_name}'s Location`,
           address: body.delivery_address,
-          phone: phoneNumber,
+          phone: body.contact_number || body.phone || "Not provided",
           status: "active",
-          country: "Philippines",
         })
         .select("id")
         .single()
 
-      if (!locationError) {
-        locationId = newLocation.id
-        console.log("Created location with phone:", phoneNumber, "ID:", locationId)
-      } else {
+      if (locationError) {
         console.error("Error creating location:", locationError)
+      } else {
+        locationId = newLocation?.id
+        console.log("Created location with phone:", body.contact_number || body.phone || "Not provided")
       }
     }
 
-    // Create order
+    // Prepare order data
     const orderData = {
       customer_id: customerId,
       customer_name: body.customer_name,
-      customer_email: body.customer_email,
-      contact_number: body.contact_number || body.phone || "",
-      delivery_address: body.delivery_address,
-      location_id: locationId, // Connect to location
-      payment_method: body.payment_method,
-      special_instructions: body.special_requests,
-      items: body.items || [],
+      customer_email: body.customer_email || null,
+      contact_number: body.contact_number || body.phone || null,
+      contact_person: body.contact_person || body.customer_name,
+      delivery_address: body.delivery_address || null,
+      payment_method: body.payment_method || null,
+      special_requests: body.special_requests || null,
+      special_instructions: body.special_instructions || body.special_requests || null,
       total_amount: Number(body.total_amount),
-      order_type: body.order_type || "custom",
+      order_type: body.order_type || "meal_set",
       meal_set_id: body.meal_set_id || null,
       meal_set_name: body.meal_set_name || null,
       quantity: Number(body.quantity) || 1,
-      status: "pending",
-      order_date: new Date().toISOString(),
+      order_date: body.order_date || new Date().toISOString().split("T")[0],
       event_type: body.event_type || null,
       event_date: body.event_date || null,
-      contact_person: body.contact_person || body.customer_name,
+      delivery_date: body.delivery_date || body.event_date || null,
+      items: body.items ? JSON.stringify(body.items) : "[]",
+      status: "pending",
     }
 
+    console.log("Creating order with data:", orderData)
+
+    // Create order
     const { data: order, error: orderError } = await supabase.from("orders").insert(orderData).select().single()
 
     if (orderError) {
       console.error("Error creating order:", orderError)
-      return NextResponse.json({ error: "Failed to create order" }, { status: 500 })
+      return NextResponse.json({ error: orderError.message }, { status: 500 })
     }
 
-    console.log("Order created successfully:", order.id)
-
-    // Create catering service record if this is a catering order or has event details
-    if (body.order_type === "catering" || body.event_type || body.event_date) {
+    // Create catering service if event details are provided
+    if (body.event_type && body.event_date && order) {
       const cateringData = {
-        customer_id: customerId,
+        customer_id: customerId || 1,
         customer_name: body.customer_name,
-        event_type: body.event_type || "catering",
-        event_date: body.event_date || new Date().toISOString().split("T")[0],
+        event_type: body.event_type,
+        event_date: body.event_date,
         guest_count: Number(body.guest_count) || Number(body.quantity) || 1,
+        location: body.delivery_address || "Not specified",
+        location_id: locationId,
+        order_id: order.id,
+        payment_method: body.payment_method || null,
+        special_requests: body.special_requests || null,
         status: "pending",
-        location: body.delivery_address || "To be determined",
-        special_requests: body.special_requests || "",
-        order_id: order.id, // Connect to order
-        location_id: locationId, // Connect to location
-        payment_method: body.payment_method,
       }
 
-      const { data: cateringService, error: cateringError } = await supabase
-        .from("catering_services")
-        .insert(cateringData)
-        .select()
-        .single()
+      const { error: cateringError } = await supabase.from("catering_services").insert(cateringData)
 
       if (cateringError) {
         console.error("Error creating catering service:", cateringError)
-      } else {
-        console.log("Created catering service:", cateringService.id)
       }
     }
 
-    // Create payment record
-    const paymentData = {
-      customer_id: customerId,
-      customer_name: body.customer_name,
-      order_id: order.id,
-      amount: Number(body.total_amount),
-      payment_method: body.payment_method,
-      status: "pending",
-      payment_date: new Date().toISOString(),
-      transaction_id: `TXN-${order.id}-${Date.now()}`,
-    }
-
-    const { data: payment, error: paymentError } = await supabase.from("payments").insert(paymentData).select().single()
-
-    if (paymentError) {
-      console.error("Error creating payment record:", paymentError)
-    } else {
-      console.log("Created payment record:", payment.id)
-    }
-
-    console.log("Order processing completed successfully")
-    return NextResponse.json({
-      success: true,
-      order,
-      location_id: locationId,
-      catering_created: !!(body.order_type === "catering" || body.event_type || body.event_date),
-    })
+    console.log("Order created successfully:", order)
+    return NextResponse.json({ success: true, order })
   } catch (error) {
     console.error("Error in POST /api/orders:", error)
     return NextResponse.json({ error: "Internal server error" }, { status: 500 })
