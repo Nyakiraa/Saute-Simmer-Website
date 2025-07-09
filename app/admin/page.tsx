@@ -12,7 +12,19 @@ import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle, DialogT
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
 import { Badge } from "@/components/ui/badge"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
-import { Edit, Search, Users, Package, Utensils, MapPin, CreditCard, ShoppingCart, Layers, LogOut } from "lucide-react"
+import {
+  Edit,
+  Search,
+  Users,
+  Package,
+  Utensils,
+  MapPin,
+  CreditCard,
+  ShoppingCart,
+  Layers,
+  LogOut,
+  Eye,
+} from "lucide-react"
 import { toast } from "sonner"
 import AdminAuthWrapper from "@/components/admin-auth-wrapper"
 import { signOut } from "@/lib/supabase-auth"
@@ -43,7 +55,7 @@ interface MealSet {
   type: string
   price: number
   description: string
-  items: string
+  items: any
   comment?: string
   created_at: string
 }
@@ -144,6 +156,9 @@ function AdminDashboard() {
   const [editingLocation, setEditingLocation] = useState<Location | null>(null)
   const [editingPayment, setEditingPayment] = useState<Payment | null>(null)
   const [editingOrder, setEditingOrder] = useState<Order | null>(null)
+
+  // View order items modal state
+  const [viewingOrderItems, setViewingOrderItems] = useState<{ order: Order; mealSet: MealSet | null } | null>(null)
 
   // Load data on component mount
   useEffect(() => {
@@ -262,6 +277,59 @@ function AdminDashboard() {
     } catch (error) {
       console.error("Error loading orders:", error)
     }
+  }
+
+  // View order items function
+  const handleViewOrderItems = async (order: Order) => {
+    if (order.meal_set_id) {
+      const mealSet = mealSets.find((ms) => ms.id === order.meal_set_id)
+      setViewingOrderItems({ order, mealSet: mealSet || null })
+    } else {
+      setViewingOrderItems({ order, mealSet: null })
+    }
+  }
+
+  // Render meal items function
+  const renderMealItems = (items: any) => {
+    if (!items) return <span className="text-gray-500">No items data</span>
+
+    // Handle both string and object formats
+    if (typeof items === "string") {
+      return <span className="text-gray-600">{items}</span>
+    }
+
+    if (typeof items === "object" && items !== null) {
+      return (
+        <div className="space-y-2 text-sm">
+          {items.am_snack && (
+            <div>
+              <span className="font-medium text-gray-700">AM Snack:</span>
+              <span className="ml-2 text-gray-600">
+                {Array.isArray(items.am_snack) ? items.am_snack.join(", ") : items.am_snack}
+              </span>
+            </div>
+          )}
+          {items.lunch && (
+            <div>
+              <span className="font-medium text-gray-700">Lunch:</span>
+              <span className="ml-2 text-gray-600">
+                {Array.isArray(items.lunch) ? items.lunch.join(", ") : items.lunch}
+              </span>
+            </div>
+          )}
+          {items.pm_snack && (
+            <div>
+              <span className="font-medium text-gray-700">PM Snack:</span>
+              <span className="ml-2 text-gray-600">
+                {Array.isArray(items.pm_snack) ? items.pm_snack.join(", ") : items.pm_snack}
+              </span>
+            </div>
+          )}
+        </div>
+      )
+    }
+
+    return <span className="text-gray-500">No items data</span>
   }
 
   // CRUD Operations for Customers
@@ -615,6 +683,7 @@ function AdminDashboard() {
                   <p className="text-xs text-muted-foreground">Registered users</p>
                 </CardContent>
               </Card>
+
               <Card>
                 <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
                   <CardTitle className="text-sm font-medium">Menu Items</CardTitle>
@@ -625,6 +694,7 @@ function AdminDashboard() {
                   <p className="text-xs text-muted-foreground">Available items</p>
                 </CardContent>
               </Card>
+
               <Card>
                 <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
                   <CardTitle className="text-sm font-medium">Active Orders</CardTitle>
@@ -637,6 +707,7 @@ function AdminDashboard() {
                   <p className="text-xs text-muted-foreground">Orders in progress</p>
                 </CardContent>
               </Card>
+
               <Card>
                 <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
                   <CardTitle className="text-sm font-medium">Total Revenue</CardTitle>
@@ -704,39 +775,44 @@ function AdminDashboard() {
                             </TableCell>
                             <TableCell className="text-sm">{formatDate(order.created_at)}</TableCell>
                             <TableCell>
-                              <Dialog
-                                open={isOrderModalOpen && editingOrder?.id === order.id}
-                                onOpenChange={(open) => {
-                                  setIsOrderModalOpen(open)
-                                  if (!open) setEditingOrder(null)
-                                }}
-                              >
-                                <DialogTrigger asChild>
-                                  <Button
-                                    variant="outline"
-                                    size="sm"
-                                    onClick={() => {
-                                      setEditingOrder(order)
-                                      setIsOrderModalOpen(true)
-                                    }}
-                                  >
-                                    <Edit className="h-4 w-4" />
-                                  </Button>
-                                </DialogTrigger>
-                                <DialogContent>
-                                  <DialogHeader>
-                                    <DialogTitle>Edit Order Status</DialogTitle>
-                                  </DialogHeader>
-                                  <OrderForm
-                                    order={editingOrder}
-                                    onSave={handleSaveOrder}
-                                    onCancel={() => {
-                                      setIsOrderModalOpen(false)
-                                      setEditingOrder(null)
-                                    }}
-                                  />
-                                </DialogContent>
-                              </Dialog>
+                              <div className="flex space-x-1">
+                                <Button size="sm" variant="outline" onClick={() => handleViewOrderItems(order)}>
+                                  <Eye className="w-3 h-3" />
+                                </Button>
+                                <Dialog
+                                  open={isOrderModalOpen && editingOrder?.id === order.id}
+                                  onOpenChange={(open) => {
+                                    setIsOrderModalOpen(open)
+                                    if (!open) setEditingOrder(null)
+                                  }}
+                                >
+                                  <DialogTrigger asChild>
+                                    <Button
+                                      variant="outline"
+                                      size="sm"
+                                      onClick={() => {
+                                        setEditingOrder(order)
+                                        setIsOrderModalOpen(true)
+                                      }}
+                                    >
+                                      <Edit className="h-4 w-4" />
+                                    </Button>
+                                  </DialogTrigger>
+                                  <DialogContent>
+                                    <DialogHeader>
+                                      <DialogTitle>Edit Order Status</DialogTitle>
+                                    </DialogHeader>
+                                    <OrderForm
+                                      order={editingOrder}
+                                      onSave={handleSaveOrder}
+                                      onCancel={() => {
+                                        setIsOrderModalOpen(false)
+                                        setEditingOrder(null)
+                                      }}
+                                    />
+                                  </DialogContent>
+                                </Dialog>
+                              </div>
                             </TableCell>
                           </TableRow>
                         ))}
@@ -942,6 +1018,7 @@ function AdminDashboard() {
                   <CardContent>
                     <p className="text-sm text-gray-600 mb-4">{mealSet.description}</p>
                     <div className="text-2xl font-bold text-red-600 mb-4">{formatCurrency(mealSet.price)}</div>
+                    <div className="mb-4">{renderMealItems(mealSet.items)}</div>
                     {mealSet.comment && <p className="text-sm text-gray-500">{mealSet.comment}</p>}
                   </CardContent>
                 </Card>
@@ -1166,6 +1243,75 @@ function AdminDashboard() {
             </Card>
           </TabsContent>
         </Tabs>
+
+        {/* Order Items View Modal */}
+        {viewingOrderItems && (
+          <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+            <div className="bg-white p-6 rounded-lg max-w-2xl w-full mx-4 max-h-[80vh] overflow-y-auto">
+              <h3 className="text-lg font-semibold mb-4">Order Details - #{viewingOrderItems.order.id}</h3>
+
+              <div className="space-y-4">
+                <div className="grid grid-cols-2 gap-4">
+                  <div>
+                    <strong>Customer:</strong> {viewingOrderItems.order.customer_name}
+                  </div>
+                  <div>
+                    <strong>Email:</strong> {viewingOrderItems.order.customer_email}
+                  </div>
+                  <div>
+                    <strong>Contact:</strong> {viewingOrderItems.order.contact_number}
+                  </div>
+                  <div>
+                    <strong>Event Type:</strong> {viewingOrderItems.order.event_type}
+                  </div>
+                  <div>
+                    <strong>Event Date:</strong> {viewingOrderItems.order.event_date}
+                  </div>
+                  <div>
+                    <strong>Quantity:</strong> {viewingOrderItems.order.quantity} persons
+                  </div>
+                </div>
+
+                {viewingOrderItems.order.delivery_address && (
+                  <div>
+                    <strong>Delivery Address:</strong>
+                    <p className="text-gray-600 mt-1">{viewingOrderItems.order.delivery_address}</p>
+                  </div>
+                )}
+
+                {viewingOrderItems.mealSet && (
+                  <div className="border-t pt-4">
+                    <h4 className="font-semibold mb-3">Meal Set: {viewingOrderItems.mealSet.name}</h4>
+                    <div className="bg-gray-50 p-4 rounded-lg">{renderMealItems(viewingOrderItems.mealSet.items)}</div>
+                    {viewingOrderItems.mealSet.comment && (
+                      <div className="mt-3 p-3 bg-red-50 border border-red-200 rounded-lg">
+                        <strong className="text-red-600">Special Note:</strong>
+                        <p className="text-red-600 mt-1">{viewingOrderItems.mealSet.comment}</p>
+                      </div>
+                    )}
+                  </div>
+                )}
+
+                {viewingOrderItems.order.special_requests && (
+                  <div className="border-t pt-4">
+                    <strong>Special Requests:</strong>
+                    <p className="text-gray-600 mt-1">{viewingOrderItems.order.special_requests}</p>
+                  </div>
+                )}
+
+                <div className="border-t pt-4">
+                  <div className="text-xl font-bold text-green-600">
+                    Total: ₱{Number(viewingOrderItems.order.total_amount).toFixed(2)}
+                  </div>
+                </div>
+              </div>
+
+              <div className="flex justify-end mt-6">
+                <Button onClick={() => setViewingOrderItems(null)}>Close</Button>
+              </div>
+            </div>
+          </div>
+        )}
       </div>
     </div>
   )
@@ -1347,7 +1493,7 @@ function MealSetForm({
     type: mealSet?.type || "standard",
     price: mealSet?.price || 0,
     description: mealSet?.description || "",
-    items: mealSet?.items || "",
+    items: typeof mealSet?.items === "string" ? mealSet.items : JSON.stringify(mealSet?.items || {}),
     comment: mealSet?.comment || "",
   })
 
@@ -1399,7 +1545,7 @@ function MealSetForm({
         />
       </div>
       <div>
-        <Label htmlFor="items">Items (comma-separated)</Label>
+        <Label htmlFor="items">Items (comma-separated or JSON)</Label>
         <Textarea
           id="items"
           value={formData.items}
